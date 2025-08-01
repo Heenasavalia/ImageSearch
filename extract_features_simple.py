@@ -9,8 +9,8 @@ warnings.filterwarnings('ignore')
 
 def get_feature_vector(img_path):
     """
-    Extract basic features from image using PIL
-    This is a fallback when TensorFlow is not available
+    Extract simple but effective features for object recognition
+    Focuses on basic characteristics that distinguish different object types
     """
     try:
         # Load and resize image
@@ -20,49 +20,117 @@ def get_feature_vector(img_path):
         # Convert to numpy array
         img_array = np.array(img)
         
-        # Extract basic features:
-        # 1. Color histogram (RGB channels)
-        # 2. Edge detection (simple gradient)
-        # 3. Texture features (local variance)
+        # 1. BASIC COLOR FEATURES
+        # Average color for each channel
+        avg_r = np.mean(img_array[:, :, 0])
+        avg_g = np.mean(img_array[:, :, 1])
+        avg_b = np.mean(img_array[:, :, 2])
         
-        # Color histogram features (768 features - 256 per channel)
-        hist_features = []
-        for channel in range(3):
-            hist, _ = np.histogram(img_array[:, :, channel], bins=256, range=(0, 256))
-            hist_features.extend(hist)
+        # Color standard deviation (indicates color variety)
+        std_r = np.std(img_array[:, :, 0])
+        std_g = np.std(img_array[:, :, 1])
+        std_b = np.std(img_array[:, :, 2])
         
-        # Simple edge detection (gradient magnitude)
+        # 2. BRIGHTNESS AND CONTRAST
+        # Convert to grayscale
         gray = np.mean(img_array, axis=2)
-        grad_x = np.gradient(gray, axis=1)
-        grad_y = np.gradient(gray, axis=0)
-        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
         
-        # Edge histogram (256 features)
-        edge_hist, _ = np.histogram(gradient_magnitude, bins=256, range=(0, gradient_magnitude.max()))
+        # Average brightness
+        avg_brightness = np.mean(gray)
         
-        # Texture features (local variance in 8x8 blocks)
-        texture_features = []
-        for i in range(0, 224, 8):
-            for j in range(0, 224, 8):
-                block = gray[i:i+8, j:j+8]
-                texture_features.append(np.var(block))
+        # Contrast (standard deviation of grayscale)
+        contrast = np.std(gray)
+        
+        # 3. SIMPLE EDGE DETECTION
+        # Calculate gradients
+        grad_x = np.diff(gray, axis=1)
+        grad_y = np.diff(gray, axis=0)
+        
+        # Edge strength (use only grad_x for simplicity)
+        edge_strength = np.mean(np.abs(grad_x))
+        
+        # 4. TEXTURE FEATURES
+        # Local variance (texture measure)
+        local_variance = np.var(gray)
+        
+        # 5. SHAPE FEATURES
+        # Calculate binary image
+        threshold = np.mean(gray)
+        binary = gray > threshold
+        
+        # Area ratio (how much of image is object vs background)
+        area_ratio = np.sum(binary) / binary.size
+        
+        # 6. COLOR DISTRIBUTION
+        # Create color histogram (simplified)
+        color_hist = []
+        for channel in range(3):
+            hist, _ = np.histogram(img_array[:, :, channel], bins=16, range=(0, 256))
+            hist = hist / np.sum(hist)  # Normalize
+            color_hist.extend(hist)
+        
+        # 7. SPATIAL FEATURES
+        # Divide image into 4 quadrants and analyze each
+        h, w = gray.shape
+        quadrants = [
+            gray[:h//2, :w//2],      # Top-left
+            gray[:h//2, w//2:],      # Top-right
+            gray[h//2:, :w//2],      # Bottom-left
+            gray[h//2:, w//2:]       # Bottom-right
+        ]
+        
+        quadrant_features = []
+        for quad in quadrants:
+            quadrant_features.extend([
+                np.mean(quad),
+                np.std(quad),
+                np.max(quad) - np.min(quad)  # Dynamic range
+            ])
+        
+        # 8. OBJECT-SPECIFIC FEATURES
+        # These help distinguish between different object types
+        
+        # Color saturation (flowers are usually more colorful)
+        saturation = np.std([avg_r, avg_g, avg_b])
+        
+        # Texture complexity (animals have more texture than smooth objects)
+        texture_complexity = np.std(grad_x)
+        
+        # Shape complexity (organic vs geometric)
+        shape_complexity = 1 - area_ratio  # More complex shapes have lower area ratio
+        
+        # 9. COMBINE ALL FEATURES
+        basic_features = [
+            avg_r, avg_g, avg_b,           # 3 - Average colors
+            std_r, std_g, std_b,           # 3 - Color variety
+            avg_brightness, contrast,      # 2 - Brightness and contrast
+            edge_strength,                 # 1 - Edge strength
+            local_variance,                # 1 - Texture
+            area_ratio,                    # 1 - Shape area
+            saturation,                    # 1 - Color saturation
+            texture_complexity,            # 1 - Texture complexity
+            shape_complexity               # 1 - Shape complexity
+        ]
         
         # Combine all features
         features = np.concatenate([
-            hist_features,      # 768 features
-            edge_hist,          # 256 features  
-            texture_features    # 784 features (28*28 blocks)
+            basic_features,                # 16 basic features
+            color_hist,                    # 48 color histogram features (16*3)
+            quadrant_features              # 12 quadrant features (4*3)
         ])
         
         # Normalize features
         features = (features - np.mean(features)) / (np.std(features) + 1e-8)
         
-        # Ensure we have exactly 1280 features to match TensorFlow MobileNetV2 output
-        if len(features) > 1280:
-            features = features[:1280]  # Truncate to 1280
-        elif len(features) < 1280:
-            # Pad with zeros if we have fewer features
-            features = np.pad(features, (0, 1280 - len(features)), 'constant')
+        # Ensure we have exactly 1280 features by repeating the pattern
+        target_length = 1280
+        if len(features) < target_length:
+            # Repeat the features to reach target length
+            repeats_needed = target_length // len(features) + 1
+            features = np.tile(features, repeats_needed)
+        
+        # Take exactly 1280 features
+        features = features[:target_length]
         
         return features
         

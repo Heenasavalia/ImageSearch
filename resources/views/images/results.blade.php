@@ -167,42 +167,31 @@
             <div class="subtitle">Similar images found in your database</div>
         </div>
         
-        <!-- @if(isset($allScores))
-            <div style="margin: 20px 0; padding: 10px; background: #ffe; border: 1px solid #ccc; border-radius: 8px;">
-                <h4>All Similarity Scores (for debugging):</h4>
-                <ul>
-                    @foreach($allScores as $score)
-                        <li>
-                            <b>{{ $score['image']->path }}</b>:
-                            {{ number_format($score['similarity'] * 100, 2) }}%
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif -->
         
-        @if(count($results) === 0)
-            <div class="no-results">
-                <div class="no-results-icon">🔍</div>
-                <h3>No similar images found</h3>
-                <p>Try uploading more images to the database or search with a different image.</p>
-            </div>
-        @else
-            <div class="results-count">
-                Found {{ count($results) }} similar image{{ count($results) > 1 ? 's' : '' }}
-            </div>
+        
+                 @if(count($results) === 0)
+             <div class="no-results">
+                 <div class="no-results-icon">🔍</div>
+                 <h3>No images found in database</h3>
+                 <p>Upload some images first, then try searching.</p>
+             </div>
+         @else
+             <div class="results-count">
+                 Found {{ count($results) }} similar image{{ count($results) > 1 ? 's' : '' }} (20%+ similarity)
+             </div>
             
             <div class="results-grid">
                 @foreach($results as $result)
                     <div class="result-card">
                         <img src="{{ asset('storage/' . $result['image']->path) }}" 
                              alt="Similar image" 
-                             class="result-image">
+                             class="result-image"
+                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlPC90ZXh0Pjwvc3ZnPg=='">
                         <div class="similarity-score">
                             {{ number_format($result['similarity'] * 100, 1) }}% Match
                         </div>
                         <div class="image-info">
-                            Uploaded: {{ $result['image']->created_at->format('M d, Y') }}
+                            {{ basename($result['image']->path) }}
                         </div>
                     </div>
                 @endforeach
