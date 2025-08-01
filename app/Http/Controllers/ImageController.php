@@ -130,7 +130,7 @@ class ImageController extends Controller
                 ];
 
                 // Add images to results with reasonable similarity threshold
-                if ($similarity > 0.2) { // Higher threshold for better accuracy
+                if ($similarity >= 0.95) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
