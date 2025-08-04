@@ -114,15 +114,16 @@ class ImageController extends Controller
                     continue;
                 }
 
-                $similarity = $this->cosineSimilarity($searchVectorArr, $dbVectorArr);
-
-                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.1)");
-
-                // Debug: Log the first few values of both vectors to see if they're reasonable
+                // Debug: Log vector lengths and first few values
+                Log::debug("Image ID {$img->id} - Search vector length: " . count($searchVectorArr) . ", DB vector length: " . count($dbVectorArr));
                 if (count($searchVectorArr) > 0 && count($dbVectorArr) > 0) {
                     Log::debug("Search vector sample: " . implode(',', array_slice($searchVectorArr, 0, 5)));
                     Log::debug("DB vector sample: " . implode(',', array_slice($dbVectorArr, 0, 5)));
                 }
+
+                $similarity = $this->cosineSimilarity($searchVectorArr, $dbVectorArr);
+
+                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.1)");
 
                 $allScores[] = [
                     'image' => $img,
@@ -130,7 +131,7 @@ class ImageController extends Controller
                 ];
 
                 // Add images to results with reasonable similarity threshold
-                if ($similarity >= 0.95) {
+                if ($similarity >= 0.5) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
@@ -147,11 +148,17 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary for debugging
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.2)");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.5)");
         if (count($allScores) > 0) {
             $maxSimilarity = max(array_column($allScores, 'similarity'));
             $avgSimilarity = array_sum(array_column($allScores, 'similarity')) / count($allScores);
             Log::info("Similarity stats - Max: $maxSimilarity, Avg: $avgSimilarity");
+            
+            // Log top 5 matches for debugging
+            $topMatches = array_slice($allScores, 0, 5);
+            foreach ($topMatches as $match) {
+                Log::info("Top match: " . basename($match['image']->path) . " - Similarity: " . number_format($match['similarity'], 3));
+            }
         }
 
         return view('images.results', ['results' => $results, 'allScores' => $allScores]);
@@ -237,26 +244,28 @@ class ImageController extends Controller
             }
         }
 
-        $dot = 0.0;
-        $normA = 0.0;
-        $normB = 0.0;
+        // Normalize vectors to unit length for better comparison
+        $norm1 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $vec1)));
+        $norm2 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $vec2)));
+        
+        if ($norm1 > 0) {
+            $vec1 = array_map(function($x) use ($norm1) { return $x / $norm1; }, $vec1);
+        }
+        if ($norm2 > 0) {
+            $vec2 = array_map(function($x) use ($norm2) { return $x / $norm2; }, $vec2);
+        }
 
+        $dot = 0.0;
         for ($i = 0; $i < count($vec1); $i++) {
             $dot += $vec1[$i] * $vec2[$i];
-            $normA += $vec1[$i] ** 2;
-            $normB += $vec2[$i] ** 2;
         }
 
-        // Avoid division by zero
-        if ($normA == 0 || $normB == 0) {
-            return 0.0;
-        }
+        // Cosine similarity is already between -1 and 1, convert to 0-1 range
+        $similarity = ($dot + 1) / 2;
 
-        $similarity = $dot / (sqrt($normA) * sqrt($normB));
-
-        // Apply sigmoid transformation to make similarity scores more meaningful
-        // This helps distinguish between similar and dissimilar objects better
-        $similarity = 1 / (1 + exp(-2 * ($similarity - 0.1)));
+        // Apply a more strict transformation to better distinguish between similar and dissimilar objects
+        // This makes the similarity scores more discriminative
+        $similarity = max(0, min(1, $similarity * 0.6));
 
         return $similarity;
     }
