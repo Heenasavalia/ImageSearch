@@ -123,15 +123,32 @@ class ImageController extends Controller
 
                 $similarity = $this->cosineSimilarity($searchVectorArr, $dbVectorArr);
 
-                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.1)");
+                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.2)");
+                
+                // Debug category scores for the last 4 features
+                if (count($searchVectorArr) >= 4 && count($dbVectorArr) >= 4) {
+                    $search_flower = $searchVectorArr[count($searchVectorArr) - 4] ?? 0;
+                    $search_animal = $searchVectorArr[count($searchVectorArr) - 3] ?? 0;
+                    $search_jewelry = $searchVectorArr[count($searchVectorArr) - 2] ?? 0;
+                    $search_human = $searchVectorArr[count($searchVectorArr) - 1] ?? 0;
+                    
+                    $db_flower = $dbVectorArr[count($dbVectorArr) - 4] ?? 0;
+                    $db_animal = $dbVectorArr[count($dbVectorArr) - 3] ?? 0;
+                    $db_jewelry = $dbVectorArr[count($dbVectorArr) - 2] ?? 0;
+                    $db_human = $dbVectorArr[count($dbVectorArr) - 1] ?? 0;
+                    
+                    Log::info("Category scores for image " . basename($img->path) . ":");
+                    Log::info("  Search: F=" . number_format($search_flower, 3) . ", A=" . number_format($search_animal, 3) . ", J=" . number_format($search_jewelry, 3) . ", H=" . number_format($search_human, 3));
+                    Log::info("  DB:     F=" . number_format($db_flower, 3) . ", A=" . number_format($db_animal, 3) . ", J=" . number_format($db_jewelry, 3) . ", H=" . number_format($db_human, 3));
+                }
 
                 $allScores[] = [
                     'image' => $img,
                     'similarity' => $similarity,
                 ];
 
-                // Add images to results with reasonable similarity threshold
-                if ($similarity >= 0.2) {
+                // Add images to results with strict similarity threshold
+                if ($similarity >= 0.4) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
@@ -148,7 +165,7 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary for debugging
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.2)");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.4)");
         if (count($allScores) > 0) {
             $maxSimilarity = max(array_column($allScores, 'similarity'));
             $avgSimilarity = array_sum(array_column($allScores, 'similarity')) / count($allScores);
@@ -266,6 +283,41 @@ class ImageController extends Controller
         // Apply a more lenient transformation to allow more matches
         // This makes the similarity scores less strict
         $similarity = max(0, min(1, $similarity * 1.2));
+
+        // COMPLETE CATEGORY BLOCKING - only allow same category matches
+        // Check if both images have similar category scores (last 4 features)
+        if (count($vec1) >= 4 && count($vec2) >= 4) {
+            $search_flower = $vec1[count($vec1) - 4] ?? 0;
+            $search_animal = $vec1[count($vec1) - 3] ?? 0;
+            $search_jewelry = $vec1[count($vec1) - 2] ?? 0;
+            $search_human = $vec1[count($vec1) - 1] ?? 0;
+            
+            $db_flower = $vec2[count($vec2) - 4] ?? 0;
+            $db_animal = $vec2[count($vec2) - 3] ?? 0;
+            $db_jewelry = $vec2[count($vec2) - 2] ?? 0;
+            $db_human = $vec2[count($vec2) - 1] ?? 0;
+            
+            // Find dominant category for search image
+            $search_scores = [$search_flower, $search_animal, $search_jewelry, $search_human];
+            $search_max_index = array_search(max($search_scores), $search_scores);
+            
+            // Find dominant category for database image
+            $db_scores = [$db_flower, $db_animal, $db_jewelry, $db_human];
+            $db_max_index = array_search(max($db_scores), $db_scores);
+            
+            $categories = ['FLOWER', 'ANIMAL', 'JEWELRY', 'HUMAN'];
+            
+            // COMPLETE CATEGORY BLOCKING - only allow same category matches
+            if ($search_max_index === $db_max_index) {
+                // Same category - allow match and boost
+                $similarity *= 2.0; // Double the similarity for same category
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Allowing and boosting");
+            } else {
+                // Different categories - COMPLETELY BLOCK the match
+                $similarity = 0.0; // Set to 0 to completely block cross-category matches
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - COMPLETELY BLOCKED");
+            }
+        }
 
         return $similarity;
     }

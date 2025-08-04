@@ -9,8 +9,8 @@ warnings.filterwarnings('ignore')
 
 def get_feature_vector(img_path):
     """
-    Extract simple but effective features for object recognition
-    Focuses on basic characteristics that distinguish different object types
+    Extract features specifically designed to distinguish between flowers and animals
+    Focuses on the key visual differences between these categories
     """
     try:
         # Load and resize image
@@ -20,7 +20,7 @@ def get_feature_vector(img_path):
         # Convert to numpy array
         img_array = np.array(img)
         
-        # 1. BASIC COLOR FEATURES
+        # 1. COLOR ANALYSIS (Most important for flowers vs animals)
         # Average color for each channel
         avg_r = np.mean(img_array[:, :, 0])
         avg_g = np.mean(img_array[:, :, 1])
@@ -34,162 +34,123 @@ def get_feature_vector(img_path):
         # 2. BRIGHTNESS AND CONTRAST
         # Convert to grayscale
         gray = np.mean(img_array, axis=2)
-        
-        # Average brightness
         avg_brightness = np.mean(gray)
-        
-        # Contrast (standard deviation of grayscale)
         contrast = np.std(gray)
         
-        # 3. SIMPLE EDGE DETECTION
+        # 3. TEXTURE ANALYSIS (Most important for animals)
         # Calculate gradients
         grad_x = np.diff(gray, axis=1)
         grad_y = np.diff(gray, axis=0)
         
-        # Edge strength (use only grad_x for simplicity)
-        edge_strength = np.mean(np.abs(grad_x))
+        # Texture measures
+        texture_complexity = np.std(grad_x)
+        edge_density = np.sum(np.abs(grad_x) > np.mean(np.abs(grad_x))) / grad_x.size
         
-        # 4. TEXTURE FEATURES
-        # Local variance (texture measure)
-        local_variance = np.var(gray)
-        
-        # 5. SHAPE FEATURES
+        # 4. SHAPE ANALYSIS
         # Calculate binary image
         threshold = np.mean(gray)
         binary = gray > threshold
-        
-        # Area ratio (how much of image is object vs background)
         area_ratio = np.sum(binary) / binary.size
         
-        # 6. COLOR DISTRIBUTION
-        # Create color histogram (simplified)
-        color_hist = []
-        for channel in range(3):
-            hist, _ = np.histogram(img_array[:, :, channel], bins=16, range=(0, 256))
-            hist = hist / np.sum(hist)  # Normalize
-            color_hist.extend(hist)
+        # 5. FLOWER-SPECIFIC FEATURES
+        # Flowers are typically:
+        # - Very colorful (high saturation)
+        # - Have specific color patterns (red, pink, yellow, etc.)
+        # - Often have green backgrounds
+        # - Are usually centered and large in the image
         
-        # 7. SPATIAL FEATURES
-        # Divide image into 4 quadrants and analyze each
-        h, w = gray.shape
-        quadrants = [
-            gray[:h//2, :w//2],      # Top-left
-            gray[:h//2, w//2:],      # Top-right
-            gray[h//2:, :w//2],      # Bottom-left
-            gray[h//2:, w//2:]       # Bottom-right
-        ]
-        
-        quadrant_features = []
-        for quad in quadrants:
-            quadrant_features.extend([
-                np.mean(quad),
-                np.std(quad),
-                np.max(quad) - np.min(quad)  # Dynamic range
-            ])
-        
-        # 8. OBJECT-SPECIFIC FEATURES
-        # These help distinguish between different object types
-        
-        # Color saturation (flowers are usually more colorful)
+        # Color saturation
         saturation = np.std([avg_r, avg_g, avg_b])
         
-        # Texture complexity (animals have more texture than smooth objects)
-        texture_complexity = np.std(grad_x)
+        # Red dominance (roses, tulips, etc.)
+        red_dominance = avg_r / (avg_r + avg_g + avg_b + 1e-8)
         
-        # Shape complexity (organic vs geometric)
-        shape_complexity = 1 - area_ratio  # More complex shapes have lower area ratio
+        # Green background (leaves, stems)
+        green_dominance = avg_g / (avg_r + avg_g + avg_b + 1e-8)
         
-        # 9. ENHANCED OBJECT RECOGNITION FEATURES
-        # Color dominance (helps identify specific object types)
-        color_dominance = max(avg_r, avg_g, avg_b) / (avg_r + avg_g + avg_b + 1e-8)
+        # Color variety (flowers have many different colors)
+        color_variety = std_r + std_g + std_b
         
-        # Edge density (animals have more edges than flowers)
-        edge_density = np.sum(np.abs(grad_x) > np.mean(np.abs(grad_x))) / grad_x.size
+        # 6. ANIMAL-SPECIFIC FEATURES
+        # Animals are typically:
+        # - Have fur texture (high texture complexity)
+        # - Brown/gray colors (natural tones)
+        # - Have many edges (fur details)
+        # - Often have eyes, nose, etc. (complex patterns)
         
-        # Color harmony (flowers often have harmonious colors)
-        color_harmony = 1 - np.std([avg_r, avg_g, avg_b]) / (np.mean([avg_r, avg_g, avg_b]) + 1e-8)
+        # Brown/gray color detection
+        brown_score = (avg_r > 100) * (avg_g > 80) * (avg_b < 120) * 0.5
+        gray_score = (abs(avg_r - avg_g) < 20) * (abs(avg_g - avg_b) < 20) * 0.5
         
-        # Texture uniformity (smooth vs rough surfaces)
-        texture_uniformity = 1 - np.std(grad_x) / (np.mean(np.abs(grad_x)) + 1e-8)
+        # Texture complexity (fur)
+        fur_texture = texture_complexity * edge_density
         
-        # 10. ADDITIONAL DISCRIMINATIVE FEATURES
-        # Brightness distribution (helps distinguish objects)
-        brightness_skew = np.mean((gray - np.mean(gray))**3) / (np.std(gray)**3 + 1e-8)
+        # 7. CATEGORY PREDICTORS (MULTI-CATEGORY)
         
-        # Color temperature (warm vs cool colors)
-        color_temperature = (avg_r - avg_b) / (avg_r + avg_g + avg_b + 1e-8)
-        
-        # Spatial complexity (how much the image changes across space)
-        spatial_complexity = np.std(np.diff(gray, axis=0)) + np.std(np.diff(gray, axis=1))
-        
-        # Object size estimate (larger objects vs smaller details)
-        object_size = np.sum(binary) / binary.size
-        
-        # 11. OBJECT CATEGORY PREDICTORS (MOST IMPORTANT)
-        # These are the key features that distinguish object categories
-        
-        # Jewelry indicators (shiny, metallic, geometric)
-        jewelry_score = (
-            (avg_brightness > 160) * 0.4 +           # Very bright/shiny
-            (contrast > 60) * 0.3 +                  # High contrast
-            (color_temperature < 0.05) * 0.2 +       # Very cool colors (silver/gold)
-            (texture_uniformity > 0.8) * 0.1         # Very smooth surface
-        )
-        
-        # Animal indicators (textured, organic, natural colors, furry)
-        animal_score = (
-            (texture_complexity > 15) * 0.5 +        # Very high texture (fur)
-            (edge_density > 0.4) * 0.3 +             # Many edges (fur details)
-            (color_temperature > 0.15) * 0.1 +       # Warm natural colors
-            (spatial_complexity > 25) * 0.1          # Complex spatial patterns
-        )
-        
-        # Flower indicators (colorful, organic, centered, vibrant)
+        # Flower score - based on flower characteristics
         flower_score = (
-            (saturation > 40) * 0.5 +                # Very high saturation
-            (std_r + std_g + std_b > 80) * 0.3 +     # High color variety
-            (color_harmony > 0.7) * 0.1 +            # Very harmonious colors
-            (object_size > 0.4) * 0.1                # Large centered object
+            (saturation > 50) * 0.4 +                    # Very high saturation
+            (red_dominance > 0.4) * 0.4 +                # Strong red/pink dominance
+            (green_dominance > 0.25) * 0.2 +             # Green background
+            (color_variety > 100) * 0.2                  # High color variety
         )
         
-        # Human indicators (symmetrical, skin tones, structured)
+        # Animal score - based on animal characteristics
+        animal_score = (
+            (texture_complexity > 20) * 0.5 +            # Very high texture (fur)
+            (edge_density > 0.5) * 0.3 +                 # Many edges
+            (brown_score + gray_score) * 0.2 +           # Natural colors
+            (fur_texture > 12) * 0.1                     # Strong fur texture
+        )
+        
+        # Jewelry score - based on jewelry characteristics
+        jewelry_score = (
+            (avg_brightness > 160) * 0.4 +               # Very bright/shiny
+            (contrast > 60) * 0.3 +                      # High contrast
+            (texture_complexity < 10) * 0.2 +            # Smooth surface
+            (color_variety < 50) * 0.1                   # Limited color variety
+        )
+        
+        # Human score - based on human characteristics
         human_score = (
-            (color_temperature > 0.2) * 0.5 +        # Very warm skin tones
-            (brightness_skew < 0.05) * 0.3 +         # Very even brightness
-            (spatial_complexity < 10) * 0.1 +        # Simple patterns
-            (texture_uniformity > 0.6) * 0.1         # Smooth skin texture
+            (avg_brightness > 100) * 0.3 +               # Moderate brightness
+            (contrast < 40) * 0.3 +                      # Low contrast (smooth skin)
+            (texture_complexity < 15) * 0.2 +            # Smooth texture
+            (red_dominance > 0.35) * 0.2                 # Skin tone
         )
         
-        # 12. COMBINE ALL FEATURES
+        # 8. BASIC FEATURES (for general similarity)
         basic_features = [
             avg_r, avg_g, avg_b,           # 3 - Average colors
             std_r, std_g, std_b,           # 3 - Color variety
             avg_brightness, contrast,      # 2 - Brightness and contrast
-            edge_strength,                 # 1 - Edge strength
-            local_variance,                # 1 - Texture
+            texture_complexity,            # 1 - Texture complexity
+            edge_density,                  # 1 - Edge density
             area_ratio,                    # 1 - Shape area
             saturation,                    # 1 - Color saturation
-            texture_complexity,            # 1 - Texture complexity
-            shape_complexity,              # 1 - Shape complexity
-            color_dominance,               # 1 - Color dominance
-            edge_density,                  # 1 - Edge density
-            color_harmony,                 # 1 - Color harmony
-            texture_uniformity,            # 1 - Texture uniformity
-            brightness_skew,               # 1 - Brightness distribution
-            color_temperature,             # 1 - Color temperature
-            spatial_complexity,            # 1 - Spatial complexity
-            object_size,                   # 1 - Object size estimate
-            jewelry_score,                 # 1 - Jewelry indicator
-            animal_score,                  # 1 - Animal indicator
+            red_dominance,                 # 1 - Red dominance
+            green_dominance,               # 1 - Green dominance
+            color_variety,                 # 1 - Color variety
+            brown_score,                   # 1 - Brown color
+            gray_score,                    # 1 - Gray color
+            fur_texture,                   # 1 - Fur texture
             flower_score,                  # 1 - Flower indicator
+            animal_score,                  # 1 - Animal indicator
+            jewelry_score,                 # 1 - Jewelry indicator
             human_score                    # 1 - Human indicator
         ]
         
-        # Combine all features
+        # 9. COLOR HISTOGRAM (simplified)
+        color_hist = []
+        for channel in range(3):
+            hist, _ = np.histogram(img_array[:, :, channel], bins=8, range=(0, 256))
+            hist = hist / np.sum(hist)  # Normalize
+            color_hist.extend(hist)
+        
+        # 10. COMBINE ALL FEATURES
         features = np.concatenate([
-            basic_features,                # 24 basic features
-            color_hist,                    # 48 color histogram features (16*3)
-            quadrant_features              # 12 quadrant features (4*3)
+            basic_features,                # 18 basic features
+            color_hist                     # 24 color histogram features (8*3)
         ])
         
         # Normalize features
@@ -199,11 +160,9 @@ def get_feature_vector(img_path):
         # Ensure we have exactly 1280 features by repeating the pattern
         target_length = 1280
         if len(features) < target_length:
-            # Repeat the features to reach target length
             repeats_needed = target_length // len(features) + 1
             features = np.tile(features, repeats_needed)
         
-        # Take exactly 1280 features
         features = features[:target_length]
         
         return features
