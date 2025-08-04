@@ -177,7 +177,7 @@
              </div>
          @else
              <div class="results-count">
-                 Found {{ count($results) }} similar image{{ count($results) > 1 ? 's' : '' }} (10%+ similarity)
+                 Found {{ count($results) }} similar image{{ count($results) > 1 ? 's' : '' }} (30%+ similarity)
              </div>
             
             <div class="results-grid">

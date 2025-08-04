@@ -67,6 +67,31 @@ class ImageController extends Controller
         return view('images.search');
     }
 
+    public function reExtractFeatures()
+    {
+        try {
+            $images = Image::whereNotNull('path')->get();
+            $updated = 0;
+            
+            foreach ($images as $image) {
+                $fullPath = storage_path('app/public/' . $image->path);
+                
+                if (file_exists($fullPath)) {
+                    $newFeatureVector = $this->extractFeatureVector($fullPath);
+                    $image->feature_vector = $newFeatureVector;
+                    $image->save();
+                    $updated++;
+                    Log::info("Re-extracted features for image: " . basename($image->path));
+                }
+            }
+            
+            return redirect()->back()->with('success', "Successfully re-extracted features for {$updated} images.");
+        } catch (\Exception $e) {
+            Log::error('Feature re-extraction failed', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Failed to re-extract features: ' . $e->getMessage());
+        }
+    }
+
 
     public function search(Request $request)
     {
@@ -123,7 +148,7 @@ class ImageController extends Controller
 
                 $similarity = $this->cosineSimilarity($searchVectorArr, $dbVectorArr);
 
-                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.2)");
+                Log::info("Similarity with image ID {$img->id}: $similarity (threshold: 0.3)");
                 
                 // Debug category scores for the last 4 features
                 if (count($searchVectorArr) >= 4 && count($dbVectorArr) >= 4) {
@@ -160,8 +185,8 @@ class ImageController extends Controller
                     'similarity' => $similarity,
                 ];
 
-                // Add images to results with lower similarity threshold
-                if ($similarity >= 0.1) {
+                // Add images to results with higher similarity threshold for better accuracy
+                if ($similarity >= 0.3) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
@@ -178,7 +203,7 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary for debugging
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.1)");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.3)");
         if (count($allScores) > 0) {
             $maxSimilarity = max(array_column($allScores, 'similarity'));
             $avgSimilarity = array_sum(array_column($allScores, 'similarity')) / count($allScores);
@@ -188,6 +213,12 @@ class ImageController extends Controller
             $topMatches = array_slice($allScores, 0, 5);
             foreach ($topMatches as $match) {
                 Log::info("Top match: " . basename($match['image']->path) . " - Similarity: " . number_format($match['similarity'], 3));
+            }
+            
+            // Log all matches with their similarity scores for debugging
+            Log::info("=== ALL SIMILARITY SCORES ===");
+            foreach ($allScores as $score) {
+                Log::info(basename($score['image']->path) . ": " . number_format($score['similarity'], 3));
             }
         }
 
@@ -274,31 +305,7 @@ class ImageController extends Controller
             }
         }
 
-        // Normalize vectors to unit length for better comparison
-        $norm1 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $vec1)));
-        $norm2 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $vec2)));
-        
-        if ($norm1 > 0) {
-            $vec1 = array_map(function($x) use ($norm1) { return $x / $norm1; }, $vec1);
-        }
-        if ($norm2 > 0) {
-            $vec2 = array_map(function($x) use ($norm2) { return $x / $norm2; }, $vec2);
-        }
-
-        $dot = 0.0;
-        for ($i = 0; $i < count($vec1); $i++) {
-            $dot += $vec1[$i] * $vec2[$i];
-        }
-
-        // Cosine similarity is already between -1 and 1, convert to 0-1 range
-        $similarity = ($dot + 1) / 2;
-
-        // Apply a more lenient transformation to allow more matches
-        // This makes the similarity scores less strict
-        $similarity = max(0, min(1, $similarity * 1.2));
-
-        // COMPLETE CATEGORY BLOCKING - only allow same category matches
-        // Check if both images have similar category scores (last 4 features)
+        // CATEGORY FILTERING - Check category compatibility first
         if (count($vec1) >= 4 && count($vec2) >= 4) {
             $search_flower = $vec1[count($vec1) - 4] ?? 0;
             $search_animal = $vec1[count($vec1) - 3] ?? 0;
@@ -313,31 +320,57 @@ class ImageController extends Controller
             // Find dominant category for search image
             $search_scores = [$search_flower, $search_animal, $search_jewelry, $search_human];
             $search_max_index = array_search(max($search_scores), $search_scores);
+            $search_max_score = max($search_scores);
             
             // Find dominant category for database image
             $db_scores = [$db_flower, $db_animal, $db_jewelry, $db_human];
             $db_max_index = array_search(max($db_scores), $db_scores);
+            $db_max_score = max($db_scores);
             
             $categories = ['FLOWER', 'ANIMAL', 'JEWELRY', 'HUMAN'];
             
-            // IMPROVED CATEGORY BLOCKING - only allow same category matches with minimum confidence
-            $search_max_score = max($search_scores);
-            $db_max_score = max($db_scores);
-            
-            if ($search_max_index === $db_max_index && $search_max_score > 0.01 && $db_max_score > 0.01) {
-                // Same category - MASSIVE BOOST
-                $similarity *= 5.0; // 5x boost for same category
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - MASSIVE BOOST (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
-            } else if ($search_max_score > 0.02 && $db_max_score > 0.02) {
-                // Different categories - COMPLETE BLOCK
-                $similarity = 0.0; // Completely block cross-category matches
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - COMPLETELY BLOCKED (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+            // STRICT CATEGORY FILTERING - Only allow same category matches with sufficient confidence
+            if ($search_max_score > 0.1 && $db_max_score > 0.1) {
+                if ($search_max_index !== $db_max_index) {
+                    // Different categories - COMPLETE BLOCK
+                    Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - BLOCKED (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+                    return 0.0; // Return 0 similarity for cross-category matches
+                } else {
+                    // Same category - allow normal matching
+                    Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - ALLOWED (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+                }
             } else {
-                // Very low confidence - allow normal matching
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Normal matching (very low confidence)");
+                // Low confidence - allow normal matching but with reduced weight
+                Log::info("Low confidence categories - allowing normal matching");
             }
         }
 
+        // Calculate cosine similarity on the main feature vectors (excluding category scores)
+        $mainVec1 = array_slice($vec1, 0, count($vec1) - 4);
+        $mainVec2 = array_slice($vec2, 0, count($vec2) - 4);
+        
+        // Normalize vectors to unit length for better comparison
+        $norm1 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $mainVec1)));
+        $norm2 = sqrt(array_sum(array_map(function($x) { return $x * $x; }, $mainVec2)));
+        
+        if ($norm1 <= 0 || $norm2 <= 0) {
+            return 0.0; // Return 0 if either vector has zero magnitude
+        }
+        
+        $vec1_normalized = array_map(function($x) use ($norm1) { return $x / $norm1; }, $mainVec1);
+        $vec2_normalized = array_map(function($x) use ($norm2) { return $x / $norm2; }, $mainVec2);
+
+        $dot = 0.0;
+        for ($i = 0; $i < count($vec1_normalized); $i++) {
+            $dot += $vec1_normalized[$i] * $vec2_normalized[$i];
+        }
+
+        // Cosine similarity is between -1 and 1, convert to 0-1 range
+        $similarity = ($dot + 1) / 2;
+        
+        // Ensure similarity is within valid range
+        $similarity = max(0.0, min(1.0, $similarity));
+        
         return $similarity;
     }
 }

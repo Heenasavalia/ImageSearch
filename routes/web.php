@@ -12,3 +12,4 @@ Route::post('/images/upload', [ImageController::class, 'upload'])->name('images.
 Route::get('/images/search', [ImageController::class, 'showSearchForm'])->name('images.search.form');
 Route::post('/images/search', [ImageController::class, 'search'])->name('images.search');
 Route::get('/images/clear', [ImageController::class, 'clearOldImages'])->name('images.clear');
+Route::get('/images/re-extract', [ImageController::class, 'reExtractFeatures'])->name('images.re-extract');

@@ -85,53 +85,73 @@ def get_feature_vector(img_path):
         # Texture complexity (fur)
         fur_texture = texture_complexity * edge_density
         
-        # 7. CATEGORY PREDICTORS (MULTI-CATEGORY)
+        # 7. CATEGORY PREDICTORS (MULTI-CATEGORY) - IMPROVED DETECTION
         
-        # Flower score - based on flower characteristics (COMPLETE REWRITE)
+        # Flower score - based on flower characteristics (IMPROVED)
         flower_score = 0.0
-        if saturation > 15:  # Any saturation
-            flower_score += 0.2
-        if red_dominance > 0.15:  # Any red dominance
+        if saturation > 20:  # High saturation
             flower_score += 0.3
-        if green_dominance > 0.08:  # Any green
+        if red_dominance > 0.25:  # Strong red dominance
+            flower_score += 0.4
+        if green_dominance > 0.15:  # Green background
             flower_score += 0.2
-        if color_variety > 30:  # Any color variety
+        if color_variety > 50:  # High color variety
             flower_score += 0.2
-        if avg_brightness > 60:  # Any brightness
+        if avg_brightness > 80:  # Bright images
             flower_score += 0.1
+        if texture_complexity < 15:  # Smooth texture (flowers are smooth)
+            flower_score += 0.2
         
-        # Animal score - based on animal characteristics (COMPLETE REWRITE)
+        # Animal score - based on animal characteristics (IMPROVED)
         animal_score = 0.0
-        if texture_complexity > 5:  # Any texture
-            animal_score += 0.2
-        if edge_density > 0.15:  # Any edges
-            animal_score += 0.2
-        if brown_score > 0:  # Any brown
+        if texture_complexity > 8:  # High texture (fur)
             animal_score += 0.3
-        if gray_score > 0:  # Any gray
+        if edge_density > 0.2:  # Many edges (fur details)
             animal_score += 0.3
-        if fur_texture > 1:  # Any fur texture
+        if brown_score > 0.1:  # Brown colors
+            animal_score += 0.4
+        if gray_score > 0.1:  # Gray colors
+            animal_score += 0.3
+        if fur_texture > 2:  # Fur texture
+            animal_score += 0.3
+        if contrast > 30:  # Moderate contrast
+            animal_score += 0.2
+        if avg_brightness < 120:  # Not too bright
             animal_score += 0.2
         
-        # Jewelry score - based on jewelry characteristics (IMPROVED DETECTION)
-        jewelry_score = (
-            (avg_brightness > 130) * 0.4 +               # Bright/shiny
-            (contrast > 40) * 0.3 +                      # High contrast
-            (texture_complexity < 18) * 0.2 +            # Smooth surface
-            (color_variety < 90) * 0.2 +                 # Limited color variety
-            (saturation < 40) * 0.1 +                    # Less colorful
-            (red_dominance < 0.4) * 0.1                  # Not red dominant
-        )
+        # Jewelry score - based on jewelry characteristics (IMPROVED)
+        jewelry_score = 0.0
+        if avg_brightness > 140:  # Very bright/shiny
+            jewelry_score += 0.4
+        if contrast > 50:  # High contrast
+            jewelry_score += 0.3
+        if texture_complexity < 10:  # Very smooth surface
+            jewelry_score += 0.3
+        if color_variety < 60:  # Limited color variety
+            jewelry_score += 0.2
+        if saturation < 30:  # Less colorful
+            jewelry_score += 0.2
+        if red_dominance < 0.3:  # Not red dominant
+            jewelry_score += 0.1
+        if green_dominance < 0.2:  # Not green
+            jewelry_score += 0.1
         
-        # Human score - based on human characteristics (IMPROVED DETECTION)
-        human_score = (
-            (avg_brightness > 70) * 0.3 +                # Moderate brightness
-            (contrast < 55) * 0.3 +                      # Low contrast (smooth skin)
-            (texture_complexity < 25) * 0.2 +            # Smooth texture
-            (red_dominance > 0.25) * 0.3 +               # Skin tone
-            (color_variety < 100) * 0.1 +                # Limited color variety
-            (green_dominance < 0.3) * 0.1                # Not green dominant
-        )
+        # Human score - based on human characteristics (IMPROVED)
+        human_score = 0.0
+        if avg_brightness > 80 and avg_brightness < 140:  # Moderate brightness
+            human_score += 0.3
+        if contrast < 40:  # Low contrast (smooth skin)
+            human_score += 0.3
+        if texture_complexity < 20:  # Smooth texture
+            human_score += 0.3
+        if red_dominance > 0.3 and red_dominance < 0.6:  # Skin tone range
+            human_score += 0.4
+        if color_variety < 80:  # Limited color variety
+            human_score += 0.2
+        if green_dominance < 0.25:  # Not green dominant
+            human_score += 0.2
+        if saturation < 50:  # Moderate saturation
+            human_score += 0.2
         
         # 8. BASIC FEATURES (for general similarity)
         basic_features = [
