@@ -51,6 +51,10 @@ def get_feature_vector(img_path):
         
         # Multi-scale texture analysis
         texture_features = []
+        # Store gradients from first scale for edge detection
+        first_scale_grad_x = None
+        first_scale_grad_y = None
+        
         for scale in [1, 2, 4]:
             # Downsample
             if scale > 1:
@@ -62,6 +66,21 @@ def get_feature_vector(img_path):
             # Calculate gradients
             grad_x = np.diff(small_gray, axis=1)
             grad_y = np.diff(small_gray, axis=0)
+            
+            # Ensure gradients have the same shape for later operations
+            h_x, w_x = grad_x.shape
+            h_y, w_y = grad_y.shape
+            min_h = min(h_x, h_y)
+            min_w = min(w_x, w_y)
+            
+            # Crop both gradients to the same size
+            grad_x = grad_x[:min_h, :min_w]
+            grad_y = grad_y[:min_h, :min_w]
+            
+            # Store first scale gradients for edge detection
+            if scale == 1:
+                first_scale_grad_x = grad_x
+                first_scale_grad_y = grad_y
             
             # Texture measures
             texture_features.extend([
@@ -77,23 +96,12 @@ def get_feature_vector(img_path):
         # Edge detection using multiple thresholds
         edge_features = []
         for threshold in [0.1, 0.3, 0.5]:
-            # Create binary edge maps separately to avoid shape mismatch
-            edge_map_x = np.abs(grad_x) > threshold * np.max(np.abs(grad_x))
-            edge_map_y = np.abs(grad_y) > threshold * np.max(np.abs(grad_y))
-            
-            # Combine edge maps by padding to same size
-            h_x, w_x = edge_map_x.shape
-            h_y, w_y = edge_map_y.shape
-            
-            # Use the smaller dimensions to avoid shape mismatch
-            min_h = min(h_x, h_y)
-            min_w = min(w_x, w_y)
-            
-            edge_map_combined = edge_map_x[:min_h, :min_w] | edge_map_y[:min_h, :min_w]
-            
+            # Create binary edge map using first scale gradients
+            edge_map = (np.abs(first_scale_grad_x) > threshold * np.max(np.abs(first_scale_grad_x))) | \
+                      (np.abs(first_scale_grad_y) > threshold * np.max(np.abs(first_scale_grad_y)))
             edge_features.extend([
-                np.sum(edge_map_combined) / edge_map_combined.size,  # Edge density
-                np.std(edge_map_combined.astype(float))     # Edge distribution
+                np.sum(edge_map) / edge_map.size,  # Edge density
+                np.std(edge_map.astype(float))     # Edge distribution
             ])
         
         # 4. OBJECT-SPECIFIC FEATURES
