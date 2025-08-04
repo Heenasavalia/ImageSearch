@@ -78,34 +78,40 @@ def get_feature_vector(img_path):
         # - Have many edges (fur details)
         # - Often have eyes, nose, etc. (complex patterns)
         
-        # Brown/gray color detection
-        brown_score = (avg_r > 100) * (avg_g > 80) * (avg_b < 120) * 0.5
-        gray_score = (abs(avg_r - avg_g) < 20) * (abs(avg_g - avg_b) < 20) * 0.5
+        # Brown/gray color detection (IMPROVED)
+        brown_score = (avg_r > 80) * (avg_g > 60) * (avg_b < 140) * 0.6
+        gray_score = (abs(avg_r - avg_g) < 25) * (abs(avg_g - avg_b) < 25) * 0.6
         
         # Texture complexity (fur)
         fur_texture = texture_complexity * edge_density
         
         # 7. CATEGORY PREDICTORS (MULTI-CATEGORY)
         
-        # Flower score - based on flower characteristics (IMPROVED DETECTION)
-        flower_score = (
-            (saturation > 25) * 0.3 +                    # High saturation
-            (red_dominance > 0.25) * 0.4 +               # Red/pink dominance
-            (green_dominance > 0.15) * 0.3 +             # Green background
-            (color_variety > 50) * 0.2 +                 # Color variety
-            (avg_brightness > 100) * 0.1 +               # Good lighting
-            (contrast > 30) * 0.1                        # Good contrast
-        )
+        # Flower score - based on flower characteristics (COMPLETE REWRITE)
+        flower_score = 0.0
+        if saturation > 15:  # Any saturation
+            flower_score += 0.2
+        if red_dominance > 0.15:  # Any red dominance
+            flower_score += 0.3
+        if green_dominance > 0.08:  # Any green
+            flower_score += 0.2
+        if color_variety > 30:  # Any color variety
+            flower_score += 0.2
+        if avg_brightness > 60:  # Any brightness
+            flower_score += 0.1
         
-        # Animal score - based on animal characteristics (IMPROVED DETECTION)
-        animal_score = (
-            (texture_complexity > 10) * 0.4 +            # High texture (fur)
-            (edge_density > 0.25) * 0.3 +                # Many edges
-            (brown_score + gray_score) * 0.3 +           # Natural colors
-            (fur_texture > 5) * 0.2 +                    # Fur texture
-            (avg_brightness < 150) * 0.1 +               # Natural lighting
-            (contrast < 60) * 0.1                        # Natural contrast
-        )
+        # Animal score - based on animal characteristics (COMPLETE REWRITE)
+        animal_score = 0.0
+        if texture_complexity > 5:  # Any texture
+            animal_score += 0.2
+        if edge_density > 0.15:  # Any edges
+            animal_score += 0.2
+        if brown_score > 0:  # Any brown
+            animal_score += 0.3
+        if gray_score > 0:  # Any gray
+            animal_score += 0.3
+        if fur_texture > 1:  # Any fur texture
+            animal_score += 0.2
         
         # Jewelry score - based on jewelry characteristics (IMPROVED DETECTION)
         jewelry_score = (
@@ -160,6 +166,9 @@ def get_feature_vector(img_path):
             basic_features,                # 18 basic features
             color_hist                     # 24 color histogram features (8*3)
         ])
+        
+        # Debug: Print category scores
+        print(f"DEBUG: Flower={flower_score:.3f}, Animal={animal_score:.3f}, Jewelry={jewelry_score:.3f}, Human={human_score:.3f}", file=sys.stderr)
         
         # Normalize features
         features = (features - np.mean(features)) / (np.std(features) + 1e-8)

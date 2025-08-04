@@ -324,17 +324,17 @@ class ImageController extends Controller
             $search_max_score = max($search_scores);
             $db_max_score = max($db_scores);
             
-            if ($search_max_index === $db_max_index && $search_max_score > 0.05 && $db_max_score > 0.05) {
-                // Same category with minimum confidence - allow match and boost
-                $similarity *= 1.5; // Boost the similarity for same category
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Allowing and boosting (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
-            } else if ($search_max_score > 0.1 && $db_max_score > 0.1) {
-                // Different categories but both have good confidence - heavily penalize
-                $similarity *= 0.1; // Heavily reduce similarity for cross-category matches
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Heavily penalized (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+            if ($search_max_index === $db_max_index && $search_max_score > 0.01 && $db_max_score > 0.01) {
+                // Same category - MASSIVE BOOST
+                $similarity *= 5.0; // 5x boost for same category
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - MASSIVE BOOST (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+            } else if ($search_max_score > 0.02 && $db_max_score > 0.02) {
+                // Different categories - COMPLETE BLOCK
+                $similarity = 0.0; // Completely block cross-category matches
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - COMPLETELY BLOCKED (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
             } else {
-                // Low confidence or unclear categories - allow normal matching
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Normal matching (low confidence)");
+                // Very low confidence - allow normal matching
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Normal matching (very low confidence)");
             }
         }
 
