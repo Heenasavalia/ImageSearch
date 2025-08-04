@@ -167,20 +167,20 @@
             <div class="subtitle">Similar images found in your database</div>
         </div>
         
-        <div class="results-count">
+        <!-- <div class="results-count">
             @if(count($results) === 0)
-                No visually similar images found (60%+ similarity threshold)
+                No {{ strtolower($searchCategory) }} images found with sufficient similarity (85%+ threshold)
             @else
-                Found {{ count($results) }} visually similar image{{ count($results) > 1 ? 's' : '' }} (60%+ similarity threshold)
+                Found {{ count($results) }} similar {{ strtolower($searchCategory) }} image{{ count($results) > 1 ? 's' : '' }} (85%+ similarity threshold)
             @endif
-        </div>
+        </div> -->
         
         @if(count($results) === 0)
             <div class="no-results">
                 <div class="no-results-icon">🔍</div>
                 <h3>No matches found</h3>
-                <p>No visually similar images found with sufficient similarity (60%+ threshold).</p>
-                <p>Try searching with a different image or upload more images to the database.</p>
+                <!-- <p>No {{ strtolower($searchCategory) }} images found with sufficient similarity (85%+ threshold).</p> -->
+                <p>Try searching with a different {{ strtolower($searchCategory) }} image or upload more {{ strtolower($searchCategory) }} images to the database.</p>
             </div>
         @else
             <div class="results-grid">
@@ -193,9 +193,9 @@
                         <div class="similarity-score">
                             {{ number_format($result['similarity'] * 100, 1) }}% Match
                         </div>
-                        <div class="image-info">
+                        <!-- <div class="image-info">
                             {{ basename($result['image']->path) }}
-                        </div>
+                        </div> -->
                     </div>
                 @endforeach
             </div>

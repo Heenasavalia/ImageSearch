@@ -190,6 +190,10 @@ class ImageController extends Controller
 
         Log::info("Search image features extracted successfully. Vector length: " . count($searchVectorArr));
 
+        // Determine the category of the search image
+        $searchCategory = $this->determineImageCategory($searchVectorArr);
+        Log::info("Search image category: " . $searchCategory['name'] . " (confidence: " . number_format($searchCategory['confidence'], 3) . ")");
+
         $images = Image::whereNotNull('feature_vector')->get();
         $results = [];
         $allScores = [];
@@ -206,21 +210,32 @@ class ImageController extends Controller
                     continue;
                 }
 
-                // Calculate visual similarity using the new approach
+                // Determine the category of the database image
+                $dbCategory = $this->determineImageCategory($dbVectorArr);
+                
+                // STRICT CATEGORY FILTERING - Only proceed if categories match
+                if ($searchCategory['name'] !== $dbCategory['name']) {
+                    Log::info("Category mismatch - Search: " . $searchCategory['name'] . ", DB: " . $dbCategory['name'] . " - SKIPPING");
+                    continue;
+                }
+
+                // If we reach here, categories match - now calculate visual similarity
                 $similarity = $this->calculateVisualSimilarity($searchVectorArr, $dbVectorArr);
 
-                Log::info("Similarity: " . number_format($similarity, 3) . " for " . basename($img->path));
+                Log::info("Category match: " . $searchCategory['name'] . " - Similarity: " . number_format($similarity, 3) . " for " . basename($img->path));
 
                 $allScores[] = [
                     'image' => $img,
-                    'similarity' => $similarity
+                    'similarity' => $similarity,
+                    'category' => $dbCategory['name']
                 ];
 
-                // Only include results with good similarity (strict threshold)
-                if ($similarity >= 0.6) { // 60% similarity threshold for exact matches
+                // Only include results with very high similarity (strict threshold)
+                if ($similarity >= 0.85) { // 85% similarity threshold for exact matches
                     $results[] = [
                         'image' => $img,
-                        'similarity' => $similarity
+                        'similarity' => $similarity,
+                        'category' => $dbCategory['name']
                     ];
                 }
             } catch (\Exception $e) {
@@ -234,17 +249,121 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above 60% threshold");
+        Log::info("Search completed: " . count($allScores) . " category matches found, " . count($results) . " above 85% threshold");
         
         if (count($results) == 0) {
-            Log::info("No matches found - no images above 60% similarity threshold");
+            Log::info("No matches found for category: " . $searchCategory['name']);
         }
 
         return view('images.results', [
             'results' => $results, 
             'allScores' => $allScores,
-            'searchCategory' => 'VISUAL_SIMILARITY'
+            'searchCategory' => $searchCategory['name']
         ]);
+    }
+
+    // NEW: Determine image category with confidence score
+    private function determineImageCategory($vector)
+    {
+        if (count($vector) < 160) {
+            return ['name' => 'UNKNOWN', 'confidence' => 0.0];
+        }
+
+        // Extract key features for category detection
+        $dominant_colors = array_slice($vector, 0, 30);
+        $color_features = array_slice($vector, 30, 20);
+        $texture_features = array_slice($vector, 50, 25);
+        $shape_features = array_slice($vector, 75, 15);
+        $lighting_features = array_slice($vector, 90, 10);
+        $edge_features = array_slice($vector, 100, 20);
+        $spatial_features = array_slice($vector, 120, 40);
+
+        // Calculate category scores based on feature analysis
+        $flower_score = $this->calculateFlowerScore($dominant_colors, $color_features, $texture_features, $shape_features, $lighting_features);
+        $animal_score = $this->calculateAnimalScore($dominant_colors, $texture_features, $shape_features, $lighting_features, $edge_features);
+        $jewelry_score = $this->calculateJewelryScore($dominant_colors, $lighting_features, $edge_features, $spatial_features);
+
+        $scores = [
+            'FLOWER' => $flower_score,
+            'ANIMAL' => $animal_score,
+            'JEWELRY' => $jewelry_score
+        ];
+
+        // Find the category with the highest score
+        $maxCategory = array_search(max($scores), $scores);
+        $maxScore = max($scores);
+
+        return ['name' => $maxCategory, 'confidence' => $maxScore];
+    }
+
+    private function calculateFlowerScore($dominant_colors, $color_features, $texture_features, $shape_features, $lighting_features)
+    {
+        $score = 0.0;
+        
+        // Flowers typically have:
+        // 1. High color saturation and variety
+        $color_variety = array_sum(array_slice($color_features, 0, 12)); // Color variance features
+        if ($color_variety > 0.5) $score += 0.3;
+        
+        // 2. Smooth texture (low texture complexity)
+        $texture_complexity = $texture_features[0] + $texture_features[1]; // Horizontal and vertical texture
+        if ($texture_complexity < 0.2) $score += 0.3;
+        
+        // 3. Centered, symmetrical shapes
+        $symmetry = $shape_features[3] ?? 0; // Symmetry score
+        if ($symmetry > 0.6) $score += 0.2;
+        
+        // 4. Natural lighting (not too bright or uniform)
+        $brightness_uniformity = $lighting_features[5] ?? 0; // Brightness uniformity
+        if ($brightness_uniformity > 0.4 && $brightness_uniformity < 0.8) $score += 0.2;
+        
+        return min(1.0, $score);
+    }
+
+    private function calculateAnimalScore($dominant_colors, $texture_features, $shape_features, $lighting_features, $edge_features)
+    {
+        $score = 0.0;
+        
+        // Animals typically have:
+        // 1. High texture complexity (fur)
+        $texture_complexity = $texture_features[0] + $texture_features[1];
+        if ($texture_complexity > 0.3) $score += 0.3;
+        
+        // 2. Many edges and details
+        $edge_density = $edge_features[5] ?? 0; // Edge density
+        if ($edge_density > 0.2) $score += 0.3;
+        
+        // 3. Natural colors (browns, grays)
+        $color_variety = array_sum(array_slice($dominant_colors, 0, 10));
+        if ($color_variety < 0.4) $score += 0.2;
+        
+        // 4. Varied lighting (natural outdoor lighting)
+        $brightness_std = $lighting_features[1] ?? 0; // Brightness standard deviation
+        if ($brightness_std > 0.2) $score += 0.2;
+        
+        return min(1.0, $score);
+    }
+
+    private function calculateJewelryScore($dominant_colors, $lighting_features, $edge_features, $spatial_features)
+    {
+        $score = 0.0;
+        
+        // Jewelry typically has:
+        // 1. Very bright and uniform lighting
+        $brightness = $lighting_features[0] ?? 0; // Average brightness
+        $uniformity = $lighting_features[5] ?? 0; // Brightness uniformity
+        if ($brightness > 0.7) $score += 0.3;
+        if ($uniformity > 0.8) $score += 0.2;
+        
+        // 2. Sharp edges and high contrast
+        $edge_strength = $edge_features[2] ?? 0; // Max edge magnitude
+        if ($edge_strength > 0.5) $score += 0.3;
+        
+        // 3. Metallic colors (silver, gold tones)
+        $color_uniformity = array_sum(array_slice($spatial_features, 0, 16)) / 16; // Average color uniformity
+        if ($color_uniformity > 0.6) $score += 0.2;
+        
+        return min(1.0, $score);
     }
 
     // NEW: Calculate visual similarity using proper feature comparison
@@ -284,9 +403,9 @@ class ImageController extends Controller
         // Convert from [-1, 1] range to [0, 1] range
         $similarity = ($cosineSimilarity + 1) / 2;
         
-        // Apply strict scaling for exact matching
+        // Apply very strict scaling for exact matching
         // This ensures that only very similar images get high scores
-        $similarity = $similarity * $similarity; // Square to make it more strict
+        $similarity = $similarity * $similarity * $similarity; // Cube to make it very strict
         
         return $similarity;
     }

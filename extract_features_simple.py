@@ -39,8 +39,8 @@ def cosine_similarity(vec1, vec2):
 
 def get_feature_vector(img_path):
     """
-    Extract comprehensive visual features for exact image matching
-    Focuses on pixel-level similarity, color distribution, texture, and shape
+    Extract highly discriminative visual features for exact category matching
+    Focuses on features that clearly distinguish between flowers, animals, jewelry, etc.
     """
     try:
         # Load and resize image to consistent size
@@ -50,100 +50,59 @@ def get_feature_vector(img_path):
         # Convert to numpy array
         img_array = np.array(img)
         
-        # 1. PIXEL-LEVEL FEATURES (Most important for exact matching)
-        # Reshape to 1D array for direct pixel comparison
-        pixels = img_array.reshape(-1, 3)
+        # 1. DOMINANT COLOR ANALYSIS (Most important for category distinction)
+        # Calculate dominant colors using histogram peaks
+        dominant_colors = extract_dominant_colors_advanced(img_array)
         
-        # 2. COLOR HISTOGRAM (Detailed color distribution)
-        color_hist = []
-        for channel in range(3):
-            hist, _ = np.histogram(img_array[:, :, channel], bins=32, range=(0, 256))
-            hist = hist / np.sum(hist)  # Normalize
-            color_hist.extend(hist)
+        # 2. COLOR DISTRIBUTION FEATURES
+        # Analyze color distribution patterns that distinguish categories
+        color_features = analyze_color_distribution(img_array)
         
-        # 3. AVERAGE COLOR FEATURES
-        avg_r = np.mean(img_array[:, :, 0])
-        avg_g = np.mean(img_array[:, :, 1])
-        avg_b = np.mean(img_array[:, :, 2])
+        # 3. TEXTURE ANALYSIS (Critical for animal vs flower distinction)
+        # Animals have fur texture, flowers have smooth petals
+        texture_features = analyze_texture_patterns(img_array)
         
-        # 4. COLOR STANDARD DEVIATION (color variety)
-        std_r = np.std(img_array[:, :, 0])
-        std_g = np.std(img_array[:, :, 1])
-        std_b = np.std(img_array[:, :, 2])
+        # 4. SHAPE AND STRUCTURE FEATURES
+        # Flowers are usually centered and have specific shapes
+        # Animals have more complex body structures
+        shape_features = analyze_shape_structure(img_array)
         
-        # 5. BRIGHTNESS AND CONTRAST
-        gray = np.mean(img_array, axis=2)
-        avg_brightness = np.mean(gray)
-        contrast = np.std(gray)
+        # 5. BRIGHTNESS AND CONTRAST PATTERNS
+        # Jewelry is very bright and shiny
+        # Flowers have natural lighting
+        # Animals have more varied lighting
+        lighting_features = analyze_lighting_patterns(img_array)
         
-        # 6. TEXTURE FEATURES (using gradients)
-        grad_x = np.diff(gray, axis=1)
-        grad_y = np.diff(gray, axis=0)
+        # 6. EDGE DENSITY AND PATTERNS
+        # Different categories have different edge patterns
+        edge_features = analyze_edge_patterns(img_array)
         
-        texture_complexity = np.std(grad_x)
-        edge_density = np.sum(np.abs(grad_x) > np.mean(np.abs(grad_x))) / grad_x.size
-        
-        # 7. SHAPE FEATURES
-        threshold = np.mean(gray)
-        binary = gray > threshold
-        area_ratio = np.sum(binary) / binary.size
-        
-        # 8. LOCAL BINARY PATTERN (LBP) for texture
-        lbp_features = compute_lbp(gray)
-        
-        # 9. DOMINANT COLORS (K-means clustering simulation)
-        dominant_colors = extract_dominant_colors(pixels)
-        
-        # 10. EDGE DETECTION FEATURES
-        edge_features = compute_edge_features(gray)
-        
-        # 11. SPATIAL FEATURES (grid-based analysis)
-        spatial_features = compute_spatial_features(img_array)
+        # 7. SPATIAL DISTRIBUTION
+        # How colors and features are distributed across the image
+        spatial_features = analyze_spatial_distribution(img_array)
         
         # Combine all features
         features = []
-        
-        # Color histogram (96 features)
-        features.extend(color_hist)
-        
-        # Basic color features (6 features)
-        features.extend([avg_r, avg_g, avg_b, std_r, std_g, std_b])
-        
-        # Brightness and contrast (2 features)
-        features.extend([avg_brightness, contrast])
-        
-        # Texture features (2 features)
-        features.extend([texture_complexity, edge_density])
-        
-        # Shape features (1 feature)
-        features.extend([area_ratio])
-        
-        # LBP features (256 features)
-        features.extend(lbp_features)
-        
-        # Dominant colors (15 features - 5 colors x 3 channels)
-        features.extend(dominant_colors)
-        
-        # Edge features (8 features)
-        features.extend(edge_features)
-        
-        # Spatial features (64 features)
-        features.extend(spatial_features)
+        features.extend(dominant_colors)      # 30 features
+        features.extend(color_features)       # 20 features
+        features.extend(texture_features)     # 25 features
+        features.extend(shape_features)       # 15 features
+        features.extend(lighting_features)    # 10 features
+        features.extend(edge_features)        # 20 features
+        features.extend(spatial_features)     # 40 features
         
         # Convert to numpy array and normalize
         features = np.array(features, dtype=np.float32)
         
-        # Normalize features to prevent any single feature from dominating
+        # Apply aggressive normalization to make differences more pronounced
         features = (features - np.mean(features)) / (np.std(features) + 1e-8)
-        features = np.clip(features, -3, 3)
+        features = np.clip(features, -5, 5)  # More aggressive clipping
         
-        # Ensure consistent length (450 features total)
-        target_length = 450
+        # Ensure consistent length (160 features total)
+        target_length = 160
         if len(features) < target_length:
-            # Pad with zeros
             features = np.pad(features, (0, target_length - len(features)), 'constant')
         elif len(features) > target_length:
-            # Truncate
             features = features[:target_length]
         
         return features
@@ -152,112 +111,287 @@ def get_feature_vector(img_path):
         print(f"Error processing image {img_path}: {str(e)}", file=sys.stderr)
         raise
 
-def compute_lbp(gray_image):
-    """Compute Local Binary Pattern for texture analysis"""
-    try:
-        # Simplified LBP implementation
-        lbp = np.zeros_like(gray_image)
+def extract_dominant_colors_advanced(img_array):
+    """Extract dominant colors with advanced analysis"""
+    features = []
+    
+    # Analyze each color channel separately
+    for channel in range(3):
+        channel_data = img_array[:, :, channel]
         
-        for i in range(1, gray_image.shape[0] - 1):
-            for j in range(1, gray_image.shape[1] - 1):
-                center = gray_image[i, j]
-                code = 0
-                
-                # Check 8 neighbors
-                neighbors = [
-                    gray_image[i-1, j-1], gray_image[i-1, j], gray_image[i-1, j+1],
-                    gray_image[i, j+1], gray_image[i+1, j+1], gray_image[i+1, j],
-                    gray_image[i+1, j-1], gray_image[i, j-1]
-                ]
-                
-                for k, neighbor in enumerate(neighbors):
-                    if neighbor >= center:
-                        code |= (1 << k)
-                
-                lbp[i, j] = code
+        # Find color peaks (dominant colors)
+        hist, bins = np.histogram(channel_data, bins=16, range=(0, 256))
+        peaks = find_peaks(hist)
         
-        # Compute histogram
-        hist, _ = np.histogram(lbp, bins=256, range=(0, 256))
-        hist = hist / np.sum(hist)
-        
-        return hist
-    except:
-        # Fallback: return zeros if LBP fails
-        return np.zeros(256)
-
-def extract_dominant_colors(pixels, n_colors=5):
-    """Extract dominant colors using simplified clustering"""
-    try:
-        # Sample pixels to speed up processing
-        if len(pixels) > 1000:
-            indices = np.random.choice(len(pixels), 1000, replace=False)
-            sample_pixels = pixels[indices]
+        # Extract peak characteristics
+        if len(peaks) > 0:
+            peak_values = [hist[p] for p in peaks]
+            peak_positions = [bins[p] for p in peaks]
+            
+            # Top 3 dominant colors for this channel
+            for i in range(3):
+                if i < len(peak_values):
+                    features.append(peak_values[i] / np.sum(hist))
+                    features.append(peak_positions[i] / 256.0)
+                else:
+                    features.extend([0.0, 0.0])
         else:
-            sample_pixels = pixels
-        
-        # Simple k-means approximation using quantiles
-        dominant_colors = []
-        for channel in range(3):
-            channel_values = sample_pixels[:, channel]
-            quantiles = np.percentile(channel_values, [20, 40, 60, 80, 100])
-            dominant_colors.extend(quantiles)
-        
-        return dominant_colors
-    except:
-        # Fallback: return average colors
-        return [np.mean(pixels[:, i]) for i in range(3)] * 5
+            features.extend([0.0, 0.0] * 3)
+    
+    return features
 
-def compute_edge_features(gray_image):
-    """Compute edge-based features"""
-    try:
-        # Simple edge detection using gradients
-        grad_x = np.diff(gray_image, axis=1)
-        grad_y = np.diff(gray_image, axis=0)
-        
-        # Edge magnitude
-        edge_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        
-        # Edge direction
-        edge_direction = np.arctan2(grad_y, grad_x)
-        
-        # Edge statistics
-        edge_mean = np.mean(edge_magnitude)
-        edge_std = np.std(edge_magnitude)
-        edge_max = np.max(edge_magnitude)
-        edge_min = np.min(edge_magnitude)
-        
-        # Direction histogram (simplified)
-        dir_hist = np.histogram(edge_direction, bins=4, range=(-np.pi, np.pi))[0]
-        dir_hist = dir_hist / np.sum(dir_hist)
-        
-        return [edge_mean, edge_std, edge_max, edge_min] + list(dir_hist)
-    except:
-        return [0.0] * 8
+def find_peaks(histogram, min_height=0.1):
+    """Find peaks in histogram"""
+    peaks = []
+    for i in range(1, len(histogram) - 1):
+        if (histogram[i] > histogram[i-1] and 
+            histogram[i] > histogram[i+1] and 
+            histogram[i] > np.max(histogram) * min_height):
+            peaks.append(i)
+    return sorted(peaks, key=lambda x: histogram[x], reverse=True)[:3]
 
-def compute_spatial_features(img_array):
-    """Compute spatial features by dividing image into grid"""
-    try:
-        # Divide image into 8x8 grid
-        h, w = img_array.shape[:2]
-        grid_h, grid_w = h // 8, w // 8
-        
-        spatial_features = []
-        
-        for i in range(8):
-            for j in range(8):
-                # Extract grid cell
-                start_h, end_h = i * grid_h, (i + 1) * grid_h
-                start_w, end_w = j * grid_w, (j + 1) * grid_w
-                
-                cell = img_array[start_h:end_h, start_w:end_w]
-                
-                # Compute average color for this cell
-                avg_color = np.mean(cell, axis=(0, 1))
-                spatial_features.extend(avg_color)
-        
-        return spatial_features
-    except:
-        return [0.0] * 64
+def analyze_color_distribution(img_array):
+    """Analyze color distribution patterns"""
+    features = []
+    
+    # Color variance analysis
+    for channel in range(3):
+        channel_data = img_array[:, :, channel]
+        features.append(np.std(channel_data))
+        features.append(np.percentile(channel_data, 25))
+        features.append(np.percentile(channel_data, 75))
+        features.append(np.max(channel_data) - np.min(channel_data))
+    
+    # Color correlation analysis
+    r_g_corr = np.corrcoef(img_array[:, :, 0].flatten(), img_array[:, :, 1].flatten())[0, 1]
+    r_b_corr = np.corrcoef(img_array[:, :, 0].flatten(), img_array[:, :, 2].flatten())[0, 1]
+    g_b_corr = np.corrcoef(img_array[:, :, 1].flatten(), img_array[:, :, 2].flatten())[0, 1]
+    
+    features.extend([r_g_corr, r_b_corr, g_b_corr])
+    
+    return features
+
+def analyze_texture_patterns(img_array):
+    """Analyze texture patterns to distinguish categories"""
+    features = []
+    
+    # Convert to grayscale for texture analysis
+    gray = np.mean(img_array, axis=2)
+    
+    # Calculate gradients
+    grad_x = np.diff(gray, axis=1)
+    grad_y = np.diff(gray, axis=0)
+    
+    # Ensure both gradients have the same shape for edge magnitude calculation
+    # Use the smaller of the two dimensions
+    min_h, min_w = min(grad_x.shape[0], grad_y.shape[0]), min(grad_x.shape[1], grad_y.shape[1])
+    grad_x = grad_x[:min_h, :min_w]
+    grad_y = grad_y[:min_h, :min_w]
+    
+    # Texture complexity measures
+    features.append(np.std(grad_x))  # Horizontal texture
+    features.append(np.std(grad_y))  # Vertical texture
+    features.append(np.mean(np.abs(grad_x)))  # Average horizontal gradient
+    features.append(np.mean(np.abs(grad_y)))  # Average vertical gradient
+    
+    # Edge density
+    edge_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    features.append(np.mean(edge_magnitude))
+    features.append(np.std(edge_magnitude))
+    
+    # Local Binary Pattern approximation
+    lbp_features = compute_simple_lbp(gray)
+    features.extend(lbp_features)
+    
+    return features
+
+def compute_simple_lbp(gray_image):
+    """Compute simplified Local Binary Pattern"""
+    features = []
+    
+    # Sample points for faster computation
+    step = 4
+    lbp_values = []
+    
+    for i in range(step, gray_image.shape[0] - step, step):
+        for j in range(step, gray_image.shape[1] - step, step):
+            center = gray_image[i, j]
+            code = 0
+            
+            # Check 4 neighbors (simplified)
+            neighbors = [
+                gray_image[i-step, j], gray_image[i+step, j],
+                gray_image[i, j-step], gray_image[i, j+step]
+            ]
+            
+            for k, neighbor in enumerate(neighbors):
+                if neighbor >= center:
+                    code |= (1 << k)
+            
+            lbp_values.append(code)
+    
+    # Compute histogram
+    if lbp_values:
+        hist, _ = np.histogram(lbp_values, bins=16, range=(0, 16))
+        hist = hist / np.sum(hist)
+        features.extend(hist)
+    else:
+        features.extend([0.0] * 16)
+    
+    return features
+
+def analyze_shape_structure(img_array):
+    """Analyze shape and structure patterns"""
+    features = []
+    
+    # Convert to grayscale
+    gray = np.mean(img_array, axis=2)
+    
+    # Threshold to get binary image
+    threshold = np.mean(gray)
+    binary = gray > threshold
+    
+    # Shape analysis
+    features.append(np.sum(binary) / binary.size)  # Area ratio
+    
+    # Center of mass analysis
+    y_coords, x_coords = np.where(binary)
+    if len(y_coords) > 0:
+        center_y = np.mean(y_coords) / gray.shape[0]
+        center_x = np.mean(x_coords) / gray.shape[1]
+        features.extend([center_y, center_x])
+    else:
+        features.extend([0.5, 0.5])
+    
+    # Symmetry analysis
+    symmetry_score = analyze_symmetry(binary)
+    features.append(symmetry_score)
+    
+    # Compactness
+    if len(y_coords) > 0:
+        perimeter = estimate_perimeter(binary)
+        area = len(y_coords)
+        compactness = (4 * np.pi * area) / (perimeter * perimeter) if perimeter > 0 else 0
+        features.append(compactness)
+    else:
+        features.append(0.0)
+    
+    return features
+
+def analyze_symmetry(binary_image):
+    """Analyze symmetry of the binary image"""
+    h, w = binary_image.shape
+    
+    # Vertical symmetry
+    left_half = binary_image[:, :w//2]
+    right_half = binary_image[:, w//2:]
+    if right_half.shape[1] != left_half.shape[1]:
+        right_half = right_half[:, :-1]
+    
+    vertical_symmetry = np.sum(left_half == np.fliplr(right_half)) / left_half.size
+    
+    # Horizontal symmetry
+    top_half = binary_image[:h//2, :]
+    bottom_half = binary_image[h//2:, :]
+    if bottom_half.shape[0] != top_half.shape[0]:
+        bottom_half = bottom_half[:-1, :]
+    
+    horizontal_symmetry = np.sum(top_half == np.flipud(bottom_half)) / top_half.size
+    
+    return (vertical_symmetry + horizontal_symmetry) / 2
+
+def estimate_perimeter(binary_image):
+    """Estimate perimeter of binary image"""
+    # Simple edge detection
+    edges = np.zeros_like(binary_image)
+    edges[:-1, :] |= binary_image[1:, :] != binary_image[:-1, :]
+    edges[:, :-1] |= binary_image[:, 1:] != binary_image[:, :-1]
+    return np.sum(edges)
+
+def analyze_lighting_patterns(img_array):
+    """Analyze lighting and brightness patterns"""
+    features = []
+    
+    # Overall brightness
+    gray = np.mean(img_array, axis=2)
+    features.append(np.mean(gray))
+    features.append(np.std(gray))
+    
+    # Brightness distribution
+    features.append(np.percentile(gray, 10))
+    features.append(np.percentile(gray, 90))
+    
+    # Contrast
+    features.append(np.max(gray) - np.min(gray))
+    
+    # Brightness uniformity (low for jewelry, high for flowers)
+    brightness_std = np.std(gray)
+    brightness_mean = np.mean(gray)
+    uniformity = 1.0 / (1.0 + brightness_std / (brightness_mean + 1e-8))
+    features.append(uniformity)
+    
+    return features
+
+def analyze_edge_patterns(img_array):
+    """Analyze edge patterns and distributions"""
+    features = []
+    
+    gray = np.mean(img_array, axis=2)
+    
+    # Calculate gradients
+    grad_x = np.diff(gray, axis=1)
+    grad_y = np.diff(gray, axis=0)
+    
+    # Ensure both gradients have the same shape
+    min_h, min_w = min(grad_x.shape[0], grad_y.shape[0]), min(grad_x.shape[1], grad_y.shape[1])
+    grad_x = grad_x[:min_h, :min_w]
+    grad_y = grad_y[:min_h, :min_w]
+    
+    # Edge magnitude
+    edge_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    
+    # Edge statistics
+    features.append(np.mean(edge_magnitude))
+    features.append(np.std(edge_magnitude))
+    features.append(np.max(edge_magnitude))
+    features.append(np.percentile(edge_magnitude, 90))
+    
+    # Edge direction analysis
+    edge_direction = np.arctan2(grad_y, grad_x)
+    
+    # Direction histogram
+    for i in range(4):
+        angle_range = (-np.pi + i * np.pi/2, -np.pi + (i+1) * np.pi/2)
+        mask = (edge_direction >= angle_range[0]) & (edge_direction < angle_range[1])
+        features.append(np.sum(mask) / edge_direction.size)
+    
+    # Edge density
+    strong_edges = edge_magnitude > np.percentile(edge_magnitude, 80)
+    features.append(np.sum(strong_edges) / strong_edges.size)
+    
+    return features
+
+def analyze_spatial_distribution(img_array):
+    """Analyze spatial distribution of features"""
+    features = []
+    
+    # Divide image into 4x4 grid
+    h, w = img_array.shape[:2]
+    grid_h, grid_w = h // 4, w // 4
+    
+    for i in range(4):
+        for j in range(4):
+            # Extract grid cell
+            start_h, end_h = i * grid_h, (i + 1) * grid_h
+            start_w, end_w = j * grid_w, (j + 1) * grid_w
+            
+            cell = img_array[start_h:end_h, start_w:end_w]
+            
+            # Average color for this cell
+            avg_color = np.mean(cell, axis=(0, 1))
+            features.extend(avg_color)
+    
+    return features
 
 def calculate_image_similarity(features1, features2):
     """
