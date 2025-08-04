@@ -7,200 +7,144 @@ import warnings
 # Suppress all warnings
 warnings.filterwarnings('ignore')
 
+def cosine_similarity(vec1, vec2):
+    """Calculate cosine similarity between two vectors"""
+    try:
+        # Ensure both vectors have the same length
+        min_len = min(len(vec1), len(vec2))
+        vec1 = vec1[:min_len]
+        vec2 = vec2[:min_len]
+        
+        # Calculate dot product
+        dot_product = np.dot(vec1, vec2)
+        
+        # Calculate magnitudes
+        mag1 = np.linalg.norm(vec1)
+        mag2 = np.linalg.norm(vec2)
+        
+        # Avoid division by zero
+        if mag1 == 0 or mag2 == 0:
+            return 0.0
+        
+        # Calculate cosine similarity
+        similarity = dot_product / (mag1 * mag2)
+        
+        # Convert from [-1, 1] to [0, 1] range
+        similarity = (similarity + 1) / 2
+        
+        return float(similarity)
+    except Exception as e:
+        print(f"Error calculating similarity: {str(e)}", file=sys.stderr)
+        return 0.0
+
 def get_feature_vector(img_path):
     """
-    Extract features specifically designed to distinguish between flowers and animals
-    Focuses on the key visual differences between these categories
+    Extract comprehensive visual features for exact image matching
+    Focuses on pixel-level similarity, color distribution, texture, and shape
     """
     try:
-        # Load and resize image
+        # Load and resize image to consistent size
         img = Image.open(img_path).convert('RGB')
         img = img.resize((224, 224))
         
         # Convert to numpy array
         img_array = np.array(img)
         
-        # 1. COLOR ANALYSIS (Most important for flowers vs animals)
-        # Average color for each channel
+        # 1. PIXEL-LEVEL FEATURES (Most important for exact matching)
+        # Reshape to 1D array for direct pixel comparison
+        pixels = img_array.reshape(-1, 3)
+        
+        # 2. COLOR HISTOGRAM (Detailed color distribution)
+        color_hist = []
+        for channel in range(3):
+            hist, _ = np.histogram(img_array[:, :, channel], bins=32, range=(0, 256))
+            hist = hist / np.sum(hist)  # Normalize
+            color_hist.extend(hist)
+        
+        # 3. AVERAGE COLOR FEATURES
         avg_r = np.mean(img_array[:, :, 0])
         avg_g = np.mean(img_array[:, :, 1])
         avg_b = np.mean(img_array[:, :, 2])
         
-        # Color standard deviation (indicates color variety)
+        # 4. COLOR STANDARD DEVIATION (color variety)
         std_r = np.std(img_array[:, :, 0])
         std_g = np.std(img_array[:, :, 1])
         std_b = np.std(img_array[:, :, 2])
         
-        # 2. BRIGHTNESS AND CONTRAST
-        # Convert to grayscale
+        # 5. BRIGHTNESS AND CONTRAST
         gray = np.mean(img_array, axis=2)
         avg_brightness = np.mean(gray)
         contrast = np.std(gray)
         
-        # 3. TEXTURE ANALYSIS (Most important for animals)
-        # Calculate gradients
+        # 6. TEXTURE FEATURES (using gradients)
         grad_x = np.diff(gray, axis=1)
         grad_y = np.diff(gray, axis=0)
         
-        # Texture measures
         texture_complexity = np.std(grad_x)
         edge_density = np.sum(np.abs(grad_x) > np.mean(np.abs(grad_x))) / grad_x.size
         
-        # 4. SHAPE ANALYSIS
-        # Calculate binary image
+        # 7. SHAPE FEATURES
         threshold = np.mean(gray)
         binary = gray > threshold
         area_ratio = np.sum(binary) / binary.size
         
-        # 5. FLOWER-SPECIFIC FEATURES
-        # Flowers are typically:
-        # - Very colorful (high saturation)
-        # - Have specific color patterns (red, pink, yellow, etc.)
-        # - Often have green backgrounds
-        # - Are usually centered and large in the image
+        # 8. LOCAL BINARY PATTERN (LBP) for texture
+        lbp_features = compute_lbp(gray)
         
-        # Color saturation
-        saturation = np.std([avg_r, avg_g, avg_b])
+        # 9. DOMINANT COLORS (K-means clustering simulation)
+        dominant_colors = extract_dominant_colors(pixels)
         
-        # Red dominance (roses, tulips, etc.)
-        red_dominance = avg_r / (avg_r + avg_g + avg_b + 1e-8)
+        # 10. EDGE DETECTION FEATURES
+        edge_features = compute_edge_features(gray)
         
-        # Green background (leaves, stems)
-        green_dominance = avg_g / (avg_r + avg_g + avg_b + 1e-8)
+        # 11. SPATIAL FEATURES (grid-based analysis)
+        spatial_features = compute_spatial_features(img_array)
         
-        # Color variety (flowers have many different colors)
-        color_variety = std_r + std_g + std_b
+        # Combine all features
+        features = []
         
-        # 6. ANIMAL-SPECIFIC FEATURES
-        # Animals are typically:
-        # - Have fur texture (high texture complexity)
-        # - Brown/gray colors (natural tones)
-        # - Have many edges (fur details)
-        # - Often have eyes, nose, etc. (complex patterns)
+        # Color histogram (96 features)
+        features.extend(color_hist)
         
-        # Brown/gray color detection (IMPROVED)
-        brown_score = (avg_r > 80) * (avg_g > 60) * (avg_b < 140) * 0.6
-        gray_score = (abs(avg_r - avg_g) < 25) * (abs(avg_g - avg_b) < 25) * 0.6
+        # Basic color features (6 features)
+        features.extend([avg_r, avg_g, avg_b, std_r, std_g, std_b])
         
-        # Texture complexity (fur)
-        fur_texture = texture_complexity * edge_density
+        # Brightness and contrast (2 features)
+        features.extend([avg_brightness, contrast])
         
-        # 7. CATEGORY PREDICTORS (MULTI-CATEGORY) - IMPROVED DETECTION
+        # Texture features (2 features)
+        features.extend([texture_complexity, edge_density])
         
-        # Flower score - based on flower characteristics (IMPROVED)
-        flower_score = 0.0
-        if saturation > 20:  # High saturation
-            flower_score += 0.3
-        if red_dominance > 0.25:  # Strong red dominance
-            flower_score += 0.4
-        if green_dominance > 0.15:  # Green background
-            flower_score += 0.2
-        if color_variety > 50:  # High color variety
-            flower_score += 0.2
-        if avg_brightness > 80:  # Bright images
-            flower_score += 0.1
-        if texture_complexity < 15:  # Smooth texture (flowers are smooth)
-            flower_score += 0.2
+        # Shape features (1 feature)
+        features.extend([area_ratio])
         
-        # Animal score - based on animal characteristics (IMPROVED)
-        animal_score = 0.0
-        if texture_complexity > 8:  # High texture (fur)
-            animal_score += 0.3
-        if edge_density > 0.2:  # Many edges (fur details)
-            animal_score += 0.3
-        if brown_score > 0.1:  # Brown colors
-            animal_score += 0.4
-        if gray_score > 0.1:  # Gray colors
-            animal_score += 0.3
-        if fur_texture > 2:  # Fur texture
-            animal_score += 0.3
-        if contrast > 30:  # Moderate contrast
-            animal_score += 0.2
-        if avg_brightness < 120:  # Not too bright
-            animal_score += 0.2
+        # LBP features (256 features)
+        features.extend(lbp_features)
         
-        # Jewelry score - based on jewelry characteristics (IMPROVED)
-        jewelry_score = 0.0
-        if avg_brightness > 140:  # Very bright/shiny
-            jewelry_score += 0.4
-        if contrast > 50:  # High contrast
-            jewelry_score += 0.3
-        if texture_complexity < 10:  # Very smooth surface
-            jewelry_score += 0.3
-        if color_variety < 60:  # Limited color variety
-            jewelry_score += 0.2
-        if saturation < 30:  # Less colorful
-            jewelry_score += 0.2
-        if red_dominance < 0.3:  # Not red dominant
-            jewelry_score += 0.1
-        if green_dominance < 0.2:  # Not green
-            jewelry_score += 0.1
+        # Dominant colors (15 features - 5 colors x 3 channels)
+        features.extend(dominant_colors)
         
-        # Human score - based on human characteristics (IMPROVED)
-        human_score = 0.0
-        if avg_brightness > 80 and avg_brightness < 140:  # Moderate brightness
-            human_score += 0.3
-        if contrast < 40:  # Low contrast (smooth skin)
-            human_score += 0.3
-        if texture_complexity < 20:  # Smooth texture
-            human_score += 0.3
-        if red_dominance > 0.3 and red_dominance < 0.6:  # Skin tone range
-            human_score += 0.4
-        if color_variety < 80:  # Limited color variety
-            human_score += 0.2
-        if green_dominance < 0.25:  # Not green dominant
-            human_score += 0.2
-        if saturation < 50:  # Moderate saturation
-            human_score += 0.2
+        # Edge features (8 features)
+        features.extend(edge_features)
         
-        # 8. BASIC FEATURES (for general similarity)
-        basic_features = [
-            avg_r, avg_g, avg_b,           # 3 - Average colors
-            std_r, std_g, std_b,           # 3 - Color variety
-            avg_brightness, contrast,      # 2 - Brightness and contrast
-            texture_complexity,            # 1 - Texture complexity
-            edge_density,                  # 1 - Edge density
-            area_ratio,                    # 1 - Shape area
-            saturation,                    # 1 - Color saturation
-            red_dominance,                 # 1 - Red dominance
-            green_dominance,               # 1 - Green dominance
-            color_variety,                 # 1 - Color variety
-            brown_score,                   # 1 - Brown color
-            gray_score,                    # 1 - Gray color
-            fur_texture,                   # 1 - Fur texture
-            flower_score,                  # 1 - Flower indicator
-            animal_score,                  # 1 - Animal indicator
-            jewelry_score,                 # 1 - Jewelry indicator
-            human_score                    # 1 - Human indicator
-        ]
+        # Spatial features (64 features)
+        features.extend(spatial_features)
         
-        # 9. COLOR HISTOGRAM (simplified)
-        color_hist = []
-        for channel in range(3):
-            hist, _ = np.histogram(img_array[:, :, channel], bins=8, range=(0, 256))
-            hist = hist / np.sum(hist)  # Normalize
-            color_hist.extend(hist)
+        # Convert to numpy array and normalize
+        features = np.array(features, dtype=np.float32)
         
-        # 10. COMBINE ALL FEATURES
-        features = np.concatenate([
-            basic_features,                # 18 basic features
-            color_hist                     # 24 color histogram features (8*3)
-        ])
-        
-        # Debug: Print category scores
-        print(f"DEBUG: Flower={flower_score:.3f}, Animal={animal_score:.3f}, Jewelry={jewelry_score:.3f}, Human={human_score:.3f}", file=sys.stderr)
-        
-        # Normalize features
+        # Normalize features to prevent any single feature from dominating
         features = (features - np.mean(features)) / (np.std(features) + 1e-8)
         features = np.clip(features, -3, 3)
         
-        # Ensure we have exactly 1280 features by repeating the pattern
-        target_length = 1280
+        # Ensure consistent length (450 features total)
+        target_length = 450
         if len(features) < target_length:
-            repeats_needed = target_length // len(features) + 1
-            features = np.tile(features, repeats_needed)
-        
-        features = features[:target_length]
+            # Pad with zeros
+            features = np.pad(features, (0, target_length - len(features)), 'constant')
+        elif len(features) > target_length:
+            # Truncate
+            features = features[:target_length]
         
         return features
         
@@ -208,15 +152,143 @@ def get_feature_vector(img_path):
         print(f"Error processing image {img_path}: {str(e)}", file=sys.stderr)
         raise
 
+def compute_lbp(gray_image):
+    """Compute Local Binary Pattern for texture analysis"""
+    try:
+        # Simplified LBP implementation
+        lbp = np.zeros_like(gray_image)
+        
+        for i in range(1, gray_image.shape[0] - 1):
+            for j in range(1, gray_image.shape[1] - 1):
+                center = gray_image[i, j]
+                code = 0
+                
+                # Check 8 neighbors
+                neighbors = [
+                    gray_image[i-1, j-1], gray_image[i-1, j], gray_image[i-1, j+1],
+                    gray_image[i, j+1], gray_image[i+1, j+1], gray_image[i+1, j],
+                    gray_image[i+1, j-1], gray_image[i, j-1]
+                ]
+                
+                for k, neighbor in enumerate(neighbors):
+                    if neighbor >= center:
+                        code |= (1 << k)
+                
+                lbp[i, j] = code
+        
+        # Compute histogram
+        hist, _ = np.histogram(lbp, bins=256, range=(0, 256))
+        hist = hist / np.sum(hist)
+        
+        return hist
+    except:
+        # Fallback: return zeros if LBP fails
+        return np.zeros(256)
+
+def extract_dominant_colors(pixels, n_colors=5):
+    """Extract dominant colors using simplified clustering"""
+    try:
+        # Sample pixels to speed up processing
+        if len(pixels) > 1000:
+            indices = np.random.choice(len(pixels), 1000, replace=False)
+            sample_pixels = pixels[indices]
+        else:
+            sample_pixels = pixels
+        
+        # Simple k-means approximation using quantiles
+        dominant_colors = []
+        for channel in range(3):
+            channel_values = sample_pixels[:, channel]
+            quantiles = np.percentile(channel_values, [20, 40, 60, 80, 100])
+            dominant_colors.extend(quantiles)
+        
+        return dominant_colors
+    except:
+        # Fallback: return average colors
+        return [np.mean(pixels[:, i]) for i in range(3)] * 5
+
+def compute_edge_features(gray_image):
+    """Compute edge-based features"""
+    try:
+        # Simple edge detection using gradients
+        grad_x = np.diff(gray_image, axis=1)
+        grad_y = np.diff(gray_image, axis=0)
+        
+        # Edge magnitude
+        edge_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        
+        # Edge direction
+        edge_direction = np.arctan2(grad_y, grad_x)
+        
+        # Edge statistics
+        edge_mean = np.mean(edge_magnitude)
+        edge_std = np.std(edge_magnitude)
+        edge_max = np.max(edge_magnitude)
+        edge_min = np.min(edge_magnitude)
+        
+        # Direction histogram (simplified)
+        dir_hist = np.histogram(edge_direction, bins=4, range=(-np.pi, np.pi))[0]
+        dir_hist = dir_hist / np.sum(dir_hist)
+        
+        return [edge_mean, edge_std, edge_max, edge_min] + list(dir_hist)
+    except:
+        return [0.0] * 8
+
+def compute_spatial_features(img_array):
+    """Compute spatial features by dividing image into grid"""
+    try:
+        # Divide image into 8x8 grid
+        h, w = img_array.shape[:2]
+        grid_h, grid_w = h // 8, w // 8
+        
+        spatial_features = []
+        
+        for i in range(8):
+            for j in range(8):
+                # Extract grid cell
+                start_h, end_h = i * grid_h, (i + 1) * grid_h
+                start_w, end_w = j * grid_w, (j + 1) * grid_w
+                
+                cell = img_array[start_h:end_h, start_w:end_w]
+                
+                # Compute average color for this cell
+                avg_color = np.mean(cell, axis=(0, 1))
+                spatial_features.extend(avg_color)
+        
+        return spatial_features
+    except:
+        return [0.0] * 64
+
+def calculate_image_similarity(features1, features2):
+    """
+    Calculate similarity between two feature vectors
+    Returns a value between 0 and 1, where 1 is identical
+    """
+    try:
+        # Ensure both vectors have the same length
+        min_len = min(len(features1), len(features2))
+        features1 = features1[:min_len]
+        features2 = features2[:min_len]
+        
+        # Calculate cosine similarity
+        similarity = cosine_similarity(features1, features2)
+        
+        return float(similarity)
+    except Exception as e:
+        print(f"Error calculating similarity: {str(e)}", file=sys.stderr)
+        return 0.0
+
 if __name__ == "__main__":
     import traceback
     if len(sys.argv) < 2:
         print("Usage: python extract_features_simple.py <image_path>")
         sys.exit(1)
+    
     img_path = sys.argv[1]
     if not os.path.exists(img_path):
         print(f"File not found: {img_path}")
         sys.exit(1)
+    
     try:
         features = get_feature_vector(img_path)
         print(','.join(map(str, features)))

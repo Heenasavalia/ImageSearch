@@ -167,19 +167,22 @@
             <div class="subtitle">Similar images found in your database</div>
         </div>
         
+        <div class="results-count">
+            @if(count($results) === 0)
+                No visually similar images found (60%+ similarity threshold)
+            @else
+                Found {{ count($results) }} visually similar image{{ count($results) > 1 ? 's' : '' }} (60%+ similarity threshold)
+            @endif
+        </div>
         
-        
-                 @if(count($results) === 0)
-             <div class="no-results">
-                 <div class="no-results-icon">🔍</div>
-                 <h3>No images found in database</h3>
-                 <p>Upload some images first, then try searching.</p>
-             </div>
-         @else
-             <div class="results-count">
-                 Found {{ count($results) }} similar image{{ count($results) > 1 ? 's' : '' }} (30%+ similarity)
-             </div>
-            
+        @if(count($results) === 0)
+            <div class="no-results">
+                <div class="no-results-icon">🔍</div>
+                <h3>No matches found</h3>
+                <p>No visually similar images found with sufficient similarity (60%+ threshold).</p>
+                <p>Try searching with a different image or upload more images to the database.</p>
+            </div>
+        @else
             <div class="results-grid">
                 @foreach($results as $result)
                     <div class="result-card">

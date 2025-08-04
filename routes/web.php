@@ -13,3 +13,6 @@ Route::get('/images/search', [ImageController::class, 'showSearchForm'])->name('
 Route::post('/images/search', [ImageController::class, 'search'])->name('images.search');
 Route::get('/images/clear', [ImageController::class, 'clearOldImages'])->name('images.clear');
 Route::get('/images/re-extract', [ImageController::class, 'reExtractFeatures'])->name('images.re-extract');
+Route::get('/images/test-similarity', [ImageController::class, 'testSimilarity'])->name('images.test-similarity');
+Route::get('/images/debug-categories', [ImageController::class, 'debugCategories'])->name('images.debug-categories');
+Route::get('/debug', function() { return view('images.debug'); })->name('debug');

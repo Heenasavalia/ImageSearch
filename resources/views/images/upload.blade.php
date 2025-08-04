@@ -180,8 +180,9 @@
         </form>
         
         <div class="nav-links">
-            <a href="{{ route('images.search.form') }}" class="nav-link">�� Search Images</a>
+            <a href="{{ route('images.search.form') }}" class="nav-link">🔍 Search Images</a>
             <a href="{{ route('images.re-extract') }}" class="nav-link" onclick="return confirm('This will re-process all existing images. Continue?')">🔄 Re-extract Features</a>
+            <a href="{{ route('debug') }}" class="nav-link">🔧 Debug Panel</a>
         </div>
     </div>
 
