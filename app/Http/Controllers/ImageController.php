@@ -131,7 +131,7 @@ class ImageController extends Controller
                 ];
 
                 // Add images to results with reasonable similarity threshold
-                if ($similarity >= 0.3) {
+                if ($similarity >= 0.2) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
@@ -148,7 +148,7 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary for debugging
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.3)");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.2)");
         if (count($allScores) > 0) {
             $maxSimilarity = max(array_column($allScores, 'similarity'));
             $avgSimilarity = array_sum(array_column($allScores, 'similarity')) / count($allScores);
@@ -263,9 +263,9 @@ class ImageController extends Controller
         // Cosine similarity is already between -1 and 1, convert to 0-1 range
         $similarity = ($dot + 1) / 2;
 
-        // Apply a more strict transformation to better distinguish between similar and dissimilar objects
-        // This makes the similarity scores more discriminative
-        $similarity = max(0, min(1, $similarity * 0.6));
+        // Apply a more lenient transformation to allow more matches
+        // This makes the similarity scores less strict
+        $similarity = max(0, min(1, $similarity * 1.2));
 
         return $similarity;
     }
