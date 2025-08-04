@@ -87,36 +87,44 @@ def get_feature_vector(img_path):
         
         # 7. CATEGORY PREDICTORS (MULTI-CATEGORY)
         
-        # Flower score - based on flower characteristics
+        # Flower score - based on flower characteristics (IMPROVED DETECTION)
         flower_score = (
-            (saturation > 50) * 0.4 +                    # Very high saturation
-            (red_dominance > 0.4) * 0.4 +                # Strong red/pink dominance
-            (green_dominance > 0.25) * 0.2 +             # Green background
-            (color_variety > 100) * 0.2                  # High color variety
+            (saturation > 25) * 0.3 +                    # High saturation
+            (red_dominance > 0.25) * 0.4 +               # Red/pink dominance
+            (green_dominance > 0.15) * 0.3 +             # Green background
+            (color_variety > 50) * 0.2 +                 # Color variety
+            (avg_brightness > 100) * 0.1 +               # Good lighting
+            (contrast > 30) * 0.1                        # Good contrast
         )
         
-        # Animal score - based on animal characteristics
+        # Animal score - based on animal characteristics (IMPROVED DETECTION)
         animal_score = (
-            (texture_complexity > 20) * 0.5 +            # Very high texture (fur)
-            (edge_density > 0.5) * 0.3 +                 # Many edges
-            (brown_score + gray_score) * 0.2 +           # Natural colors
-            (fur_texture > 12) * 0.1                     # Strong fur texture
+            (texture_complexity > 10) * 0.4 +            # High texture (fur)
+            (edge_density > 0.25) * 0.3 +                # Many edges
+            (brown_score + gray_score) * 0.3 +           # Natural colors
+            (fur_texture > 5) * 0.2 +                    # Fur texture
+            (avg_brightness < 150) * 0.1 +               # Natural lighting
+            (contrast < 60) * 0.1                        # Natural contrast
         )
         
-        # Jewelry score - based on jewelry characteristics
+        # Jewelry score - based on jewelry characteristics (IMPROVED DETECTION)
         jewelry_score = (
-            (avg_brightness > 160) * 0.4 +               # Very bright/shiny
-            (contrast > 60) * 0.3 +                      # High contrast
-            (texture_complexity < 10) * 0.2 +            # Smooth surface
-            (color_variety < 50) * 0.1                   # Limited color variety
+            (avg_brightness > 130) * 0.4 +               # Bright/shiny
+            (contrast > 40) * 0.3 +                      # High contrast
+            (texture_complexity < 18) * 0.2 +            # Smooth surface
+            (color_variety < 90) * 0.2 +                 # Limited color variety
+            (saturation < 40) * 0.1 +                    # Less colorful
+            (red_dominance < 0.4) * 0.1                  # Not red dominant
         )
         
-        # Human score - based on human characteristics
+        # Human score - based on human characteristics (IMPROVED DETECTION)
         human_score = (
-            (avg_brightness > 100) * 0.3 +               # Moderate brightness
-            (contrast < 40) * 0.3 +                      # Low contrast (smooth skin)
-            (texture_complexity < 15) * 0.2 +            # Smooth texture
-            (red_dominance > 0.35) * 0.2                 # Skin tone
+            (avg_brightness > 70) * 0.3 +                # Moderate brightness
+            (contrast < 55) * 0.3 +                      # Low contrast (smooth skin)
+            (texture_complexity < 25) * 0.2 +            # Smooth texture
+            (red_dominance > 0.25) * 0.3 +               # Skin tone
+            (color_variety < 100) * 0.1 +                # Limited color variety
+            (green_dominance < 0.3) * 0.1                # Not green dominant
         )
         
         # 8. BASIC FEATURES (for general similarity)

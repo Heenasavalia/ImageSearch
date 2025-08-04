@@ -137,9 +137,22 @@ class ImageController extends Controller
                     $db_jewelry = $dbVectorArr[count($dbVectorArr) - 2] ?? 0;
                     $db_human = $dbVectorArr[count($dbVectorArr) - 1] ?? 0;
                     
-                    Log::info("Category scores for image " . basename($img->path) . ":");
+                    // Find dominant categories
+                    $search_scores = [$search_flower, $search_animal, $search_jewelry, $search_human];
+                    $search_max_index = array_search(max($search_scores), $search_scores);
+                    $search_max_score = max($search_scores);
+                    
+                    $db_scores = [$db_flower, $db_animal, $db_jewelry, $db_human];
+                    $db_max_index = array_search(max($db_scores), $db_scores);
+                    $db_max_score = max($db_scores);
+                    
+                    $categories = ['FLOWER', 'ANIMAL', 'JEWELRY', 'HUMAN'];
+                    
+                    Log::info("Category analysis for image " . basename($img->path) . ":");
                     Log::info("  Search: F=" . number_format($search_flower, 3) . ", A=" . number_format($search_animal, 3) . ", J=" . number_format($search_jewelry, 3) . ", H=" . number_format($search_human, 3));
                     Log::info("  DB:     F=" . number_format($db_flower, 3) . ", A=" . number_format($db_animal, 3) . ", J=" . number_format($db_jewelry, 3) . ", H=" . number_format($db_human, 3));
+                    Log::info("  Search dominant: " . $categories[$search_max_index] . " (" . number_format($search_max_score, 2) . ")");
+                    Log::info("  DB dominant: " . $categories[$db_max_index] . " (" . number_format($db_max_score, 2) . ")");
                 }
 
                 $allScores[] = [
@@ -147,8 +160,8 @@ class ImageController extends Controller
                     'similarity' => $similarity,
                 ];
 
-                // Add images to results with strict similarity threshold
-                if ($similarity >= 0.4) {
+                // Add images to results with lower similarity threshold
+                if ($similarity >= 0.1) {
                     $results[] = [
                         'image' => $img,
                         'similarity' => $similarity,
@@ -165,7 +178,7 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary for debugging
-        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.4)");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold (0.1)");
         if (count($allScores) > 0) {
             $maxSimilarity = max(array_column($allScores, 'similarity'));
             $avgSimilarity = array_sum(array_column($allScores, 'similarity')) / count($allScores);
@@ -307,15 +320,21 @@ class ImageController extends Controller
             
             $categories = ['FLOWER', 'ANIMAL', 'JEWELRY', 'HUMAN'];
             
-            // COMPLETE CATEGORY BLOCKING - only allow same category matches
-            if ($search_max_index === $db_max_index) {
-                // Same category - allow match and boost
-                $similarity *= 2.0; // Double the similarity for same category
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Allowing and boosting");
+            // IMPROVED CATEGORY BLOCKING - only allow same category matches with minimum confidence
+            $search_max_score = max($search_scores);
+            $db_max_score = max($db_scores);
+            
+            if ($search_max_index === $db_max_index && $search_max_score > 0.05 && $db_max_score > 0.05) {
+                // Same category with minimum confidence - allow match and boost
+                $similarity *= 1.5; // Boost the similarity for same category
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Allowing and boosting (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
+            } else if ($search_max_score > 0.1 && $db_max_score > 0.1) {
+                // Different categories but both have good confidence - heavily penalize
+                $similarity *= 0.1; // Heavily reduce similarity for cross-category matches
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Heavily penalized (scores: " . number_format($search_max_score, 2) . ", " . number_format($db_max_score, 2) . ")");
             } else {
-                // Different categories - COMPLETELY BLOCK the match
-                $similarity = 0.0; // Set to 0 to completely block cross-category matches
-                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - COMPLETELY BLOCKED");
+                // Low confidence or unclear categories - allow normal matching
+                Log::info($categories[$search_max_index] . "-" . $categories[$db_max_index] . " MATCH - Normal matching (low confidence)");
             }
         }
 
