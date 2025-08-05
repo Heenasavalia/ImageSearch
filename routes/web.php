@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ImageController;
 
 Route::get('/', function () {
+    return redirect()->route('images.upload.form');
     return view('welcome');
 });
 
