@@ -12,87 +12,119 @@ warnings.filterwarnings('ignore')
 class FaceDetector:
     def __init__(self):
         """Initialize face detector with OpenCV's Haar cascade"""
-        # Try to load the face cascade classifier
-        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        if os.path.exists(cascade_path):
-            self.face_cascade = cv2.CascadeClassifier(cascade_path)
-        else:
-            # Fallback: try to find it in common locations
-            possible_paths = [
-                'haarcascade_frontalface_default.xml',
-                '/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml',
-                '/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml'
-            ]
-            self.face_cascade = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    self.face_cascade = cv2.CascadeClassifier(path)
-                    break
-            
-            if self.face_cascade is None:
-                print("Warning: Could not load face cascade classifier", file=sys.stderr)
+        try:
+            # Use Haar cascade which is more reliable
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            if os.path.exists(cascade_path):
+                self.face_cascade = cv2.CascadeClassifier(cascade_path)
+                print(f"Loaded face cascade from: {cascade_path}", file=sys.stderr)
+            else:
+                # Try alternative paths
+                possible_paths = [
+                    'haarcascade_frontalface_default.xml',
+                    '/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml',
+                    '/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml'
+                ]
                 self.face_cascade = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        self.face_cascade = cv2.CascadeClassifier(path)
+                        print(f"Loaded face cascade from: {path}", file=sys.stderr)
+                        break
+                
+                if self.face_cascade is None:
+                    print("Warning: Could not load face cascade classifier", file=sys.stderr)
+                    self.face_cascade = None
+        except Exception as e:
+            print(f"Error initializing face detector: {str(e)}", file=sys.stderr)
+            self.face_cascade = None
 
     def detect_faces(self, image_path: str) -> List[Tuple[int, int, int, int]]:
         """
-        Detect faces in an image
+        Detect faces in an image using Haar cascade
         Returns list of (x, y, width, height) rectangles
         """
         try:
+            print(f"Detecting faces in: {image_path}", file=sys.stderr)
+            
             # Read image
             image = cv2.imread(image_path)
             if image is None:
+                print(f"Could not read image: {image_path}", file=sys.stderr)
                 return []
+            
+            print(f"Image shape: {image.shape}", file=sys.stderr)
             
             # Convert to grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             
-            # Detect faces
+            # Detect faces with multiple scale factors
+            faces = []
+            
             if self.face_cascade is not None:
-                faces = self.face_cascade.detectMultiScale(
-                    gray,
-                    scaleFactor=1.1,
-                    minNeighbors=5,
-                    minSize=(30, 30)
-                )
-                return faces.tolist()
+                # Try different scale factors for better detection
+                scale_factors = [1.1, 1.05, 1.15]
+                min_neighbors_options = [3, 5, 7]
+                
+                for scale_factor in scale_factors:
+                    for min_neighbors in min_neighbors_options:
+                        detected_faces = self.face_cascade.detectMultiScale(
+                            gray,
+                            scaleFactor=scale_factor,
+                            minNeighbors=min_neighbors,
+                            minSize=(20, 20),
+                            maxSize=(300, 300)
+                        )
+                        
+                        if len(detected_faces) > 0:
+                            faces.extend(detected_faces.tolist())
+                            print(f"Found {len(detected_faces)} faces with scale={scale_factor}, neighbors={min_neighbors}", file=sys.stderr)
+                
+                # Remove duplicates and merge overlapping faces
+                if faces:
+                    faces = self._merge_overlapping_faces(faces)
+                    print(f"Final face count after merging: {len(faces)}", file=sys.stderr)
+                
+                return faces
             else:
-                # Fallback: simple skin color detection
-                return self._detect_faces_by_skin_color(image)
+                print("No face cascade available", file=sys.stderr)
+                return []
                 
         except Exception as e:
             print(f"Error detecting faces: {str(e)}", file=sys.stderr)
             return []
 
-    def _detect_faces_by_skin_color(self, image) -> List[Tuple[int, int, int, int]]:
-        """Fallback face detection using skin color"""
-        try:
-            # Convert to HSV
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-            
-            # Define skin color range
-            lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-            upper_skin = np.array([20, 255, 255], dtype=np.uint8)
-            
-            # Create mask
-            mask = cv2.inRange(hsv, lower_skin, upper_skin)
-            
-            # Find contours
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
-            faces = []
-            for contour in contours:
-                area = cv2.contourArea(contour)
-                if area > 1000:  # Minimum area threshold
-                    x, y, w, h = cv2.boundingRect(contour)
-                    if w > 30 and h > 30:  # Minimum size
-                        faces.append((x, y, w, h))
-            
-            return faces
-            
-        except Exception as e:
-            print(f"Error in skin color detection: {str(e)}", file=sys.stderr)
+    def _merge_overlapping_faces(self, faces: List[Tuple[int, int, int, int]]) -> List[Tuple[int, int, int, int]]:
+        """Merge overlapping face detections"""
+        if not faces:
             return []
+        
+        # Sort by area (largest first)
+        faces = sorted(faces, key=lambda x: x[2] * x[3], reverse=True)
+        
+        merged = []
+        for face in faces:
+            x1, y1, w1, h1 = face
+            is_overlapping = False
+            
+            for existing_face in merged:
+                x2, y2, w2, h2 = existing_face
+                
+                # Calculate overlap
+                overlap_x = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+                overlap_y = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+                overlap_area = overlap_x * overlap_y
+                
+                # If overlap is more than 50% of smaller face, merge
+                smaller_area = min(w1 * h1, w2 * h2)
+                if overlap_area > 0.5 * smaller_area:
+                    is_overlapping = True
+                    break
+            
+            if not is_overlapping:
+                merged.append(face)
+        
+        return merged
 
     def extract_face_features(self, image_path: str, face_rect: Tuple[int, int, int, int]) -> np.ndarray:
         """
@@ -106,30 +138,36 @@ class FaceDetector:
             
             x, y, w, h = face_rect
             
-            # Extract face region
-            face_region = image[y:y+h, x:x+w]
+            # Extract face region with some padding
+            padding = int(min(w, h) * 0.1)  # 10% padding
+            x1 = max(0, x - padding)
+            y1 = max(0, y - padding)
+            x2 = min(image.shape[1], x + w + padding)
+            y2 = min(image.shape[0], y + h + padding)
+            
+            face_region = image[y1:y2, x1:x2]
             
             # Resize to standard size
-            face_region = cv2.resize(face_region, (64, 64))
+            face_region = cv2.resize(face_region, (128, 128))
             
             # Convert to grayscale
             gray_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
             
-            # Extract features
+            # Extract comprehensive features
             features = []
             
             # 1. Histogram features
-            hist = cv2.calcHist([gray_face], [0], None, [32], [0, 256])
+            hist = cv2.calcHist([gray_face], [0], None, [64], [0, 256])
             hist = hist.flatten() / np.sum(hist)
             features.extend(hist)
             
             # 2. Edge features
             edges = cv2.Canny(gray_face, 50, 150)
-            edge_hist = cv2.calcHist([edges], [0], None, [16], [0, 256])
+            edge_hist = cv2.calcHist([edges], [0], None, [32], [0, 256])
             edge_hist = edge_hist.flatten() / (np.sum(edge_hist) + 1e-8)
             features.extend(edge_hist)
             
-            # 3. Local Binary Pattern approximation
+            # 3. Local Binary Pattern features
             lbp_features = self._compute_lbp_features(gray_face)
             features.extend(lbp_features)
             
@@ -141,18 +179,35 @@ class FaceDetector:
             grad_direction = np.arctan2(grad_y, grad_x)
             
             # Gradient magnitude histogram
-            mag_hist = np.histogram(grad_magnitude, bins=16, range=(0, np.max(grad_magnitude)))[0]
+            mag_hist = np.histogram(grad_magnitude, bins=32, range=(0, np.max(grad_magnitude)))[0]
             mag_hist = mag_hist / (np.sum(mag_hist) + 1e-8)
             features.extend(mag_hist)
             
             # Gradient direction histogram
-            dir_hist = np.histogram(grad_direction, bins=8, range=(-np.pi, np.pi))[0]
+            dir_hist = np.histogram(grad_direction, bins=16, range=(-np.pi, np.pi))[0]
             dir_hist = dir_hist / (np.sum(dir_hist) + 1e-8)
             features.extend(dir_hist)
             
-            # 5. Texture features
-            texture_features = self._compute_texture_features(gray_face)
-            features.extend(texture_features)
+            # 5. Color features
+            color_face = cv2.resize(face_region, (64, 64))
+            hsv_face = cv2.cvtColor(color_face, cv2.COLOR_BGR2HSV)
+            
+            # HSV histograms
+            h_hist = cv2.calcHist([hsv_face], [0], None, [16], [0, 180])
+            s_hist = cv2.calcHist([hsv_face], [1], None, [16], [0, 256])
+            v_hist = cv2.calcHist([hsv_face], [2], None, [16], [0, 256])
+            
+            h_hist = h_hist.flatten() / (np.sum(h_hist) + 1e-8)
+            s_hist = s_hist.flatten() / (np.sum(s_hist) + 1e-8)
+            v_hist = v_hist.flatten() / (np.sum(v_hist) + 1e-8)
+            
+            features.extend(h_hist)
+            features.extend(s_hist)
+            features.extend(v_hist)
+            
+            # 6. Spatial features
+            spatial_features = self._compute_spatial_features(gray_face)
+            features.extend(spatial_features)
             
             # Convert to numpy array and normalize
             features = np.array(features, dtype=np.float32)
@@ -200,25 +255,27 @@ class FaceDetector:
         
         return features
 
-    def _compute_texture_features(self, gray_image: np.ndarray) -> List[float]:
-        """Compute texture features"""
+    def _compute_spatial_features(self, gray_image: np.ndarray) -> List[float]:
+        """Compute spatial features for face structure"""
         features = []
         
-        # Gray-level co-occurrence matrix approximation
-        # Compute differences between adjacent pixels
-        diff_h = np.diff(gray_image, axis=1)
-        diff_v = np.diff(gray_image, axis=0)
+        # Divide image into regions and compute statistics
+        h, w = gray_image.shape
+        regions = [
+            gray_image[0:h//2, 0:w//2],      # Top-left
+            gray_image[0:h//2, w//2:w],      # Top-right
+            gray_image[h//2:h, 0:w//2],      # Bottom-left
+            gray_image[h//2:h, w//2:w]       # Bottom-right
+        ]
         
-        # Histogram of differences
-        diff_h_hist = np.histogram(diff_h, bins=16, range=(-255, 255))[0]
-        diff_v_hist = np.histogram(diff_v, bins=16, range=(-255, 255))[0]
-        
-        # Normalize
-        diff_h_hist = diff_h_hist / (np.sum(diff_h_hist) + 1e-8)
-        diff_v_hist = diff_v_hist / (np.sum(diff_v_hist) + 1e-8)
-        
-        features.extend(diff_h_hist)
-        features.extend(diff_v_hist)
+        for region in regions:
+            # Mean, std, skewness, kurtosis
+            mean_val = np.mean(region)
+            std_val = np.std(region)
+            skewness = np.mean(((region - mean_val) / (std_val + 1e-8)) ** 3)
+            kurtosis = np.mean(((region - mean_val) / (std_val + 1e-8)) ** 4) - 3
+            
+            features.extend([mean_val, std_val, skewness, kurtosis])
         
         return features
 
@@ -299,7 +356,7 @@ def get_face_features(image_path: str) -> dict:
 
 def compare_faces(face1_features: List[float], face2_features: List[float]) -> float:
     """
-    Compare two face feature vectors
+    Compare two face feature vectors with extremely strict matching
     Returns similarity score between 0 and 1
     """
     try:
@@ -308,10 +365,12 @@ def compare_faces(face1_features: List[float], face2_features: List[float]) -> f
         
         similarity = cosine_similarity(vec1, vec2)
         
-        # Apply face-specific thresholding
-        # Faces need higher similarity to be considered a match
-        if similarity < 0.7:  # Lower threshold for face matching
-            similarity = similarity * 0.5  # Penalize low similarities more
+        # Apply extremely strict face matching thresholds
+        # Only faces that are almost identical should get high scores
+        if similarity < 0.95:  # Very high threshold
+            similarity = similarity * 0.1  # Heavily penalize anything below 95%
+        elif similarity < 0.98:  # Extremely high threshold
+            similarity = similarity * 0.3  # Still penalize moderately low similarities
         
         return float(similarity)
         

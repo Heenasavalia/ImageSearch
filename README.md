@@ -1,171 +1,175 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Face Search System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A simple Laravel-based face search system that finds similar human faces in your image database.
 
-## About Laravel
+## Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
-
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-## Laravel Sponsors
-
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
-
-### Premium Partners
-
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
-
-# Image Search Engine
-
-A Laravel-based image search engine that uses feature extraction and similarity matching to find similar images.
-
-## Recent Fixes (Latest Update)
-
-### Problem Fixed
-The system was returning 100% similarity for all images regardless of their actual similarity to the search query. This was caused by:
-1. Incorrect similarity calculation in the `cosineSimilarity` function
-2. Poor category filtering that allowed cross-category matches (e.g., rabbits matching with flowers)
-3. Overly lenient similarity thresholds
-
-### Solutions Implemented
-
-#### 1. Fixed Similarity Calculation
-- **Removed artificial boosts**: Eliminated the 5x multiplier that was inflating similarity scores
-- **Proper cosine similarity**: Implemented correct cosine similarity calculation using normalized vectors
-- **Category filtering**: Added strict category-based filtering to prevent cross-category matches
-
-#### 2. Improved Category Detection
-- **Better thresholds**: Updated category detection thresholds for more accurate classification
-- **Enhanced features**: Improved feature extraction for flowers, animals, jewelry, and humans
-- **Strict filtering**: Only allows matches within the same category when confidence is high
-
-#### 3. Updated Similarity Thresholds
-- **Higher threshold**: Increased minimum similarity from 10% to 30% for better accuracy
-- **Better logging**: Added detailed logging to help debug similarity calculations
-
-## How to Use
-
-### 1. Upload Images
-- Navigate to the upload page
-- Upload images to build your search database
-- Images are automatically processed to extract features
-
-### 2. Search for Similar Images
-- Go to the search page
-- Upload an image to search for similar images
-- Results will show only images with 30%+ similarity
-- Cross-category matches are blocked (e.g., flowers won't match animals)
-
-### 3. Re-extract Features (if needed)
-- If you have existing images with old feature vectors, click "Re-extract Features"
-- This will reprocess all images with the improved algorithm
-- Use this after updating the system to ensure all images use the new detection
-
-## Technical Details
-
-### Feature Extraction
-The system uses a Python script (`extract_features_simple.py`) that extracts:
-- Color analysis (RGB channels, saturation, dominance)
-- Texture analysis (gradients, edge density)
-- Shape analysis (area ratios, binary patterns)
-- Category-specific features for flowers, animals, jewelry, and humans
-
-### Similarity Calculation
-- Uses cosine similarity between normalized feature vectors
-- Excludes category scores from main similarity calculation
-- Applies category filtering to prevent cross-category matches
-- Returns similarity scores between 0 and 1
-
-### Category Detection
-The system classifies images into four categories:
-- **Flowers**: High saturation, red dominance, green backgrounds
-- **Animals**: High texture, brown/gray colors, fur patterns
-- **Jewelry**: High brightness, smooth surfaces, limited colors
-- **Humans**: Moderate brightness, smooth skin, specific color ranges
+- 🔍 **Face-only search**: Only matches human faces, ignores animals, objects, etc.
+- 👤 **Face detection**: Automatically detects and extracts face features
+- 📊 **Similarity scoring**: Shows percentage match for each result
+- 🎯 **Accurate matching**: Uses advanced face recognition algorithms
+- 📤 **Easy upload**: Web interface to upload face images to database
 
 ## Requirements
 
 - PHP 8.0+
 - Laravel 10+
-- Python 3.7+ with PIL/Pillow
+- Python 3.7+ with required packages (see below)
 - MySQL/PostgreSQL database
 
 ## Installation
 
-1. Clone the repository
-2. Install PHP dependencies: `composer install`
-3. Install Python dependencies: `pip install pillow numpy`
-4. Configure your database in `.env`
-5. Run migrations: `php artisan migrate`
-6. Start the server: `php artisan serve`
+1. **Install PHP dependencies:**
+   ```bash
+   composer install
+   ```
 
-## Testing
+2. **Install Python dependencies:**
+   ```bash
+   pip install opencv-python face-recognition numpy pillow
+   ```
 
-To test the feature extraction:
-```bash
-python test_features.py
+3. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+4. **Configure database in `.env`:**
+   ```env
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=face_search
+   DB_USERNAME=your_username
+   DB_PASSWORD=your_password
+   ```
+
+5. **Run migrations:**
+   ```bash
+   php artisan migrate
+   ```
+
+6. **Create storage link:**
+   ```bash
+   php artisan storage:link
+   ```
+
+## Usage
+
+### 1. Upload Face Images to Database
+
+1. Start the Laravel server:
+   ```bash
+   php artisan serve
+   ```
+
+2. Open your browser to `http://localhost:8000`
+
+3. You'll be redirected to the upload page
+
+4. Upload images containing human faces:
+   - Only images with detected faces will be saved
+   - Images without faces will be rejected
+   - Multiple faces in one image are supported
+
+### 2. Search for Similar Faces
+
+1. Click "Search Faces" or go to `http://localhost:8000/images/search`
+
+2. Upload an image containing a human face to search
+
+3. View the search results showing similar faces with match percentages
+
+## How It Works
+
+1. **Upload Process**: 
+   - Images are uploaded via web interface
+   - Face detection runs automatically
+   - Only images with faces are saved to database
+   - Face features are extracted and stored
+
+2. **Search Process**:
+   - Upload a search image with a face
+   - System detects faces in search image
+   - Compares with all faces in database
+   - Shows results sorted by similarity
+
+3. **Face Detection**: Uses OpenCV and face_recognition libraries
+4. **Feature Extraction**: Extracts 128-dimensional face embeddings
+5. **Similarity Calculation**: Compares face embeddings using cosine similarity
+
+## File Structure
+
+```
+├── app/
+│   ├── Http/Controllers/
+│   │   └── ImageController.php      # Main controller for upload and search
+│   └── Models/
+│       └── Image.php                # Image model with face data
+├── resources/views/images/
+│   ├── upload.blade.php             # Upload interface
+│   ├── search.blade.php             # Search interface
+│   └── results.blade.php            # Results display
+├── face_detection.py                # Python script for face detection
+├── add_images.php                   # Alternative script to add images
+├── setup.php                        # Setup helper script
+└── routes/web.php                   # Application routes
 ```
 
-This will analyze a test image and show category scores to verify the system is working correctly.
+## Database Schema
+
+The `images` table stores:
+- `path`: Image file path
+- `has_faces`: Boolean indicating if faces were detected
+- `face_count`: Number of faces detected
+- `face_features`: Array of face embeddings (128-dimensional vectors)
+- `face_rectangles`: Array of face bounding boxes
+
+## API Endpoints
+
+- `GET /` - Redirects to upload form
+- `GET /images/upload` - Show upload form
+- `POST /images/upload` - Process image upload
+- `GET /images/search` - Show search form
+- `POST /images/search` - Process search and show results
+
+## Alternative: Command Line Upload
+
+If you prefer to add images via command line:
+
+1. Place images in `storage/app/public/images/`
+2. Run: `php add_images.php`
 
 ## Troubleshooting
 
-### All images showing 100% similarity
-1. Re-extract features for existing images using the "Re-extract Features" button
-2. Check the logs for detailed similarity calculations
-3. Verify that images are being properly categorized
+### No faces detected
+- Ensure images contain clear, front-facing human faces
+- Check that images are not too small or blurry
+- Verify Python face detection libraries are installed correctly
 
-### Poor search results
-1. Ensure you have enough images in your database
-2. Try uploading more diverse images
-3. Check that images are in the same category as your search query
+### Search returns no results
+- Make sure you have images with faces in your database
+- Try uploading a different face image for search
+- Check that the face detection script is working properly
 
-### Feature extraction errors
-1. Verify Python and PIL are installed correctly
-2. Check that image files are valid and accessible
-3. Review the Laravel logs for detailed error messages
+### Images not displaying
+- Ensure storage link is created: `php artisan storage:link`
+- Check file permissions on storage directory
+- Verify images are being saved correctly
+
+### Python script errors
+- Verify Python 3.7+ is installed
+- Install required packages: `pip install opencv-python face-recognition numpy pillow`
+- Check that the `face_detection.py` script is executable
+
+## Security Notes
+
+- Only human face images are processed and stored
+- No general image features are extracted
+- Face data is stored locally in your database
+- No external API calls for face recognition
+
+## License
+
+This project is open source and available under the MIT License.

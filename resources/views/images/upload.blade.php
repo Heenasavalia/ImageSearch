@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Upload - Image Search Engine</title>
+    <title>Upload Face Images - Face Search Database</title>
     <style>
         * {
             margin: 0;
@@ -102,21 +102,53 @@
             transform: none;
         }
         
-        .success-message {
-            background: #d4edda;
-            color: #155724;
+        .preview {
+            margin: 20px 0;
+            max-width: 200px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .info-box {
+            background: #f8f9ff;
+            border: 1px solid #e3e6ff;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .info-box ul {
+            color: #666;
+            padding-left: 20px;
+        }
+        
+        .info-box li {
+            margin-bottom: 5px;
+        }
+        
+        .alert {
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
             border: 1px solid #c3e6cb;
         }
         
-        .error-message {
+        .alert-error {
             background: #f8d7da;
             color: #721c24;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
             border: 1px solid #f5c6cb;
         }
         
@@ -137,53 +169,53 @@
         .nav-link:hover {
             color: #764ba2;
         }
-        
-        .preview {
-            margin: 20px 0;
-            max-width: 200px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">🖼️ Image Upload</div>
-        <div class="subtitle">Upload images to build your search database</div>
+        <div class="logo">📤 Upload Face Images</div>
+        <div class="subtitle">Add human face images to your search database</div>
         
         @if(session('success'))
-            <div class="success-message" id="successMessage">
+            <div class="alert alert-success">
                 {{ session('success') }}
             </div>
         @endif
         
         @if(session('error'))
-            <div class="error-message" id="errorMessage">
+            <div class="alert alert-error">
                 {{ session('error') }}
             </div>
         @endif
+        
+        <div class="info-box">
+            <h3>📋 Upload Guidelines:</h3>
+            <ul>
+                <li>Only upload images with clear human faces</li>
+                <li>Images without faces will be rejected</li>
+                <li>Supported formats: JPG, PNG, GIF (max 10MB)</li>
+                <li>Multiple faces in one image are supported</li>
+            </ul>
+        </div>
         
         <form action="{{ route('images.upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
             @csrf
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📁</div>
-                <div class="upload-text">Click to select or drag & drop an image</div>
-                <div style="color: #999; font-size: 0.9rem;">Supports: JPG, PNG, GIF</div>
+                <div class="upload-text">Click to select or drag & drop a face image</div>
+                <div style="color: #999; font-size: 0.9rem;">Supports: JPG, PNG, GIF (max 10MB)</div>
                 <input type="file" name="image" class="file-input" id="fileInput" accept="image/*" required>
             </div>
             
             <img id="preview" class="preview" style="display: none;">
             
             <button type="submit" class="btn" id="submitBtn" disabled>
-                Upload Image
+                📤 Upload to Database
             </button>
         </form>
         
         <div class="nav-links">
-            <a href="{{ route('images.search.form') }}" class="nav-link">🔍 Search Images</a>
-            <a href="{{ route('images.face-search.form') }}" class="nav-link">👤 Face Search</a>
-            <a href="{{ route('images.re-extract') }}" class="nav-link" onclick="return confirm('This will re-process all existing images. Continue?')">🔄 Re-extract Features</a>
-            <a href="{{ route('debug') }}" class="nav-link">🔧 Debug Panel</a>
+            <a href="{{ route('images.search.form') }}" class="nav-link">🔍 Search Faces</a>
         </div>
     </div>
 
@@ -230,14 +262,6 @@
                 reader.readAsDataURL(file);
             }
         }
-
-        // Auto-hide success and error messages after 5 seconds
-        setTimeout(function() {
-            var successMsg = document.getElementById('successMessage');
-            var errorMsg = document.getElementById('errorMessage');
-            if (successMsg) { successMsg.style.display = 'none'; }
-            if (errorMsg) { errorMsg.style.display = 'none'; }
-        }, 5000);
     </script>
 </body>
-</html>
+</html> 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Search - Image Search Engine</title>
+    <title>Face Search - Find Similar Human Faces</title>
     <style>
         * {
             margin: 0;
@@ -102,6 +102,37 @@
             transform: none;
         }
         
+        .preview {
+            margin: 20px 0;
+            max-width: 200px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .info-box {
+            background: #f8f9ff;
+            border: 1px solid #e3e6ff;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .info-box ul {
+            color: #666;
+            padding-left: 20px;
+        }
+        
+        .info-box li {
+            margin-bottom: 5px;
+        }
+        
         .nav-links {
             margin-top: 30px;
             display: flex;
@@ -119,39 +150,41 @@
         .nav-link:hover {
             color: #764ba2;
         }
-        
-        .preview {
-            margin: 20px 0;
-            max-width: 200px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">🔍 Image Search</div>
-        <div class="subtitle">Upload an image to find similar images</div>
+        <div class="logo">👤 Face Search</div>
+        <div class="subtitle">Upload a human face to find similar faces in your database</div>
+        
+        <div class="info-box">
+            <h3>📋 How it works:</h3>
+            <ul>
+                <li>Upload an image containing a human face</li>
+                <li>Our AI will detect and extract face features</li>
+                <li>Find similar faces from your uploaded images</li>
+                <li>Only human faces are matched (no animals, objects, etc.)</li>
+            </ul>
+        </div>
         
         <form action="{{ route('images.search') }}" method="POST" enctype="multipart/form-data" id="searchForm">
             @csrf
             <div class="search-area" id="searchArea">
                 <div class="search-icon">📁</div>
-                <div class="search-text">Click to select or drag & drop an image</div>
-                <div style="color: #999; font-size: 0.9rem;">Supports: JPG, PNG, GIF</div>
+                <div class="search-text">Click to select or drag & drop a face image</div>
+                <div style="color: #999; font-size: 0.9rem;">Supports: JPG, PNG, GIF (max 10MB)</div>
                 <input type="file" name="image" class="file-input" id="fileInput" accept="image/*" required>
             </div>
             
             <img id="preview" class="preview" style="display: none;">
             
             <button type="submit" class="btn" id="submitBtn" disabled>
-                Search Similar Images
+                🔍 Search Similar Faces
             </button>
         </form>
         
         <div class="nav-links">
-            <a href="{{ route('images.upload.form') }}" class="nav-link">📤 Upload Images</a>
-            <!-- <a href="{{ route('images.face-search.form') }}" class="nav-link">👤 Face Search</a> -->
+            <a href="{{ route('images.upload.form') }}" class="nav-link">📤 Upload Face Images</a>
         </div>
     </div>
 
