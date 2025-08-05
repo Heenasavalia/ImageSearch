@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Upload - Image Search Engine</title>
+    <title>Face Search - Image Search Engine</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -43,7 +43,7 @@
             font-size: 1.1rem;
         }
         
-        .upload-area {
+        .search-area {
             border: 3px dashed #ddd;
             border-radius: 15px;
             padding: 40px 20px;
@@ -52,23 +52,23 @@
             cursor: pointer;
         }
         
-        .upload-area:hover {
-            border-color: #667eea;
-            background-color: #f8f9ff;
+        .search-area:hover {
+            border-color: #ff6b6b;
+            background-color: #fff5f5;
         }
         
-        .upload-area.dragover {
-            border-color: #667eea;
-            background-color: #f0f2ff;
+        .search-area.dragover {
+            border-color: #ff6b6b;
+            background-color: #ffe8e8;
         }
         
-        .upload-icon {
+        .search-icon {
             font-size: 3rem;
-            color: #667eea;
+            color: #ff6b6b;
             margin-bottom: 15px;
         }
         
-        .upload-text {
+        .search-text {
             color: #666;
             font-size: 1.1rem;
             margin-bottom: 10px;
@@ -79,7 +79,7 @@
         }
         
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             color: white;
             border: none;
             padding: 15px 30px;
@@ -93,7 +93,7 @@
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
         }
         
         .btn:disabled {
@@ -102,40 +102,23 @@
             transform: none;
         }
         
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #f5c6cb;
-        }
-        
         .nav-links {
             margin-top: 30px;
             display: flex;
             justify-content: center;
             gap: 20px;
+            flex-wrap: wrap;
         }
         
         .nav-link {
-            color: #667eea;
+            color: #ff6b6b;
             text-decoration: none;
             font-weight: 600;
             transition: color 0.3s ease;
         }
         
         .nav-link:hover {
-            color: #764ba2;
+            color: #ee5a24;
         }
         
         .preview {
@@ -144,30 +127,31 @@
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
+        
+        .face-info {
+            background: #fff5f5;
+            border: 1px solid #ffcccc;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #cc3333;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">🖼️ Image Upload</div>
-        <div class="subtitle">Upload images to build your search database</div>
+        <div class="logo">👤 Face Search</div>
+        <div class="subtitle">Upload a photo with a face to find similar faces</div>
         
-        @if(session('success'))
-            <div class="success-message" id="successMessage">
-                {{ session('success') }}
-            </div>
-        @endif
+        <div class="face-info">
+            <strong>💡 Tip:</strong> Make sure the face is clearly visible and well-lit for best results.
+        </div>
         
-        @if(session('error'))
-            <div class="error-message" id="errorMessage">
-                {{ session('error') }}
-            </div>
-        @endif
-        
-        <form action="{{ route('images.upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+        <form action="{{ route('images.face-search') }}" method="POST" enctype="multipart/form-data" id="searchForm">
             @csrf
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text">Click to select or drag & drop an image</div>
+            <div class="search-area" id="searchArea">
+                <div class="search-icon">📷</div>
+                <div class="search-text">Click to select or drag & drop a photo with a face</div>
                 <div style="color: #999; font-size: 0.9rem;">Supports: JPG, PNG, GIF</div>
                 <input type="file" name="image" class="file-input" id="fileInput" accept="image/*" required>
             </div>
@@ -175,38 +159,36 @@
             <img id="preview" class="preview" style="display: none;">
             
             <button type="submit" class="btn" id="submitBtn" disabled>
-                Upload Image
+                Search Similar Faces
             </button>
         </form>
         
         <div class="nav-links">
-            <a href="{{ route('images.search.form') }}" class="nav-link">🔍 Search Images</a>
-            <a href="{{ route('images.face-search.form') }}" class="nav-link">👤 Face Search</a>
-            <a href="{{ route('images.re-extract') }}" class="nav-link" onclick="return confirm('This will re-process all existing images. Continue?')">🔄 Re-extract Features</a>
-            <a href="{{ route('debug') }}" class="nav-link">🔧 Debug Panel</a>
+            <a href="{{ route('images.upload.form') }}" class="nav-link">📤 Upload Images</a>
+            <a href="{{ route('images.search.form') }}" class="nav-link">🔍 General Search</a>
         </div>
     </div>
 
     <script>
-        const uploadArea = document.getElementById('uploadArea');
+        const searchArea = document.getElementById('searchArea');
         const fileInput = document.getElementById('fileInput');
         const preview = document.getElementById('preview');
         const submitBtn = document.getElementById('submitBtn');
         
-        uploadArea.addEventListener('click', () => fileInput.click());
+        searchArea.addEventListener('click', () => fileInput.click());
         
-        uploadArea.addEventListener('dragover', (e) => {
+        searchArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadArea.classList.add('dragover');
+            searchArea.classList.add('dragover');
         });
         
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
+        searchArea.addEventListener('dragleave', () => {
+            searchArea.classList.remove('dragover');
         });
         
-        uploadArea.addEventListener('drop', (e) => {
+        searchArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            uploadArea.classList.remove('dragover');
+            searchArea.classList.remove('dragover');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 fileInput.files = files;
@@ -224,20 +206,12 @@
                     preview.src = e.target.result;
                     preview.style.display = 'block';
                     submitBtn.disabled = false;
-                    uploadArea.style.borderColor = '#667eea';
-                    uploadArea.style.backgroundColor = '#f8f9ff';
+                    searchArea.style.borderColor = '#ff6b6b';
+                    searchArea.style.backgroundColor = '#fff5f5';
                 };
                 reader.readAsDataURL(file);
             }
         }
-
-        // Auto-hide success and error messages after 5 seconds
-        setTimeout(function() {
-            var successMsg = document.getElementById('successMessage');
-            var errorMsg = document.getElementById('errorMessage');
-            if (successMsg) { successMsg.style.display = 'none'; }
-            if (errorMsg) { errorMsg.style.display = 'none'; }
-        }, 5000);
     </script>
 </body>
-</html>
+</html> 

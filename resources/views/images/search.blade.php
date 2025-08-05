@@ -151,6 +151,7 @@
         
         <div class="nav-links">
             <a href="{{ route('images.upload.form') }}" class="nav-link">📤 Upload Images</a>
+            <!-- <a href="{{ route('images.face-search.form') }}" class="nav-link">👤 Face Search</a> -->
         </div>
     </div>
 

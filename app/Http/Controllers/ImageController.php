@@ -41,12 +41,24 @@ class ImageController extends Controller
             // Extract feature vector from the SAVED file
             $featureVector = $this->extractFeatureVector($fullPath);
 
+            // Extract face features
+            $faceData = $this->extractFaceFeatures($fullPath);
+
             $image = new Image();
             $image->path = $path;
             $image->feature_vector = $featureVector;
+            $image->has_faces = $faceData['has_faces'];
+            $image->face_count = $faceData['face_count'];
+            $image->face_features = $faceData['face_features'];
+            $image->face_rectangles = $faceData['face_rectangles'];
             $image->save();
 
-            return redirect()->back()->with('success', 'Image uploaded successfully!');
+            $message = 'Image uploaded successfully!';
+            if ($faceData['has_faces']) {
+                $message .= ' Found ' . $faceData['face_count'] . ' face(s).';
+            }
+
+            return redirect()->back()->with('success', $message);
         } catch (\Exception $e) {
             Log::error('Image upload failed', [
                 'error' => $e->getMessage(),
@@ -65,6 +77,11 @@ class ImageController extends Controller
     public function showSearchForm()
     {
         return view('images.search');
+    }
+
+    public function showFaceSearchForm()
+    {
+        return view('images.face-search');
     }
 
     public function reExtractFeatures()
@@ -183,12 +200,16 @@ class ImageController extends Controller
         $searchVector = $this->extractFeatureVector($fullPath);
         $searchVectorArr = array_map('floatval', explode(',', $searchVector));
 
+        // Extract face features from the uploaded image
+        $searchFaceData = $this->extractFaceFeatures($fullPath);
+
         // Validate search vector
         if (empty($searchVectorArr)) {
             return back()->with('error', 'Failed to extract features from uploaded image.');
         }
 
         Log::info("Search image features extracted successfully. Vector length: " . count($searchVectorArr));
+        Log::info("Search image face detection: " . ($searchFaceData['has_faces'] ? "Found " . $searchFaceData['face_count'] . " face(s)" : "No faces detected"));
 
         // Determine the category of the search image
         $searchCategory = $this->determineImageCategory($searchVectorArr);
@@ -213,29 +234,48 @@ class ImageController extends Controller
                 // Determine the category of the database image
                 $dbCategory = $this->determineImageCategory($dbVectorArr);
                 
-                // STRICT CATEGORY FILTERING - Only proceed if categories match
-                if ($searchCategory['name'] !== $dbCategory['name']) {
-                    Log::info("Category mismatch - Search: " . $searchCategory['name'] . ", DB: " . $dbCategory['name'] . " - SKIPPING");
-                    continue;
+                // Calculate visual similarity
+                $visualSimilarity = $this->calculateVisualSimilarity($searchVectorArr, $dbVectorArr);
+                
+                // Calculate face similarity if both images have faces
+                $faceSimilarity = 0.0;
+                $hasFaceMatch = false;
+                
+                if ($searchFaceData['has_faces'] && $img->has_faces && !empty($img->face_features)) {
+                    $faceSimilarity = $this->calculateFaceSimilarity($searchFaceData, $img);
+                    $hasFaceMatch = $faceSimilarity > 0.6; // Face match threshold
                 }
 
-                // If we reach here, categories match - now calculate visual similarity
-                $similarity = $this->calculateVisualSimilarity($searchVectorArr, $dbVectorArr);
-
-                Log::info("Category match: " . $searchCategory['name'] . " - Similarity: " . number_format($similarity, 3) . " for " . basename($img->path));
+                // Combine similarities - prioritize face matching for human photos
+                $finalSimilarity = $visualSimilarity;
+                if ($hasFaceMatch) {
+                    // If faces are detected and match, boost the similarity
+                    $finalSimilarity = max($visualSimilarity, $faceSimilarity * 1.2);
+                    Log::info("Face match found! Visual: " . number_format($visualSimilarity, 3) . 
+                             ", Face: " . number_format($faceSimilarity, 3) . 
+                             ", Final: " . number_format($finalSimilarity, 3) . 
+                             " for " . basename($img->path));
+                }
 
                 $allScores[] = [
                     'image' => $img,
-                    'similarity' => $similarity,
-                    'category' => $dbCategory['name']
+                    'similarity' => $finalSimilarity,
+                    'category' => $dbCategory['name'],
+                    'visual_similarity' => $visualSimilarity,
+                    'face_similarity' => $faceSimilarity,
+                    'has_face_match' => $hasFaceMatch
                 ];
 
-                // Only include results with very high similarity (strict threshold)
-                if ($similarity >= 0.85) { // 85% similarity threshold for exact matches
+                // Include results with high similarity (lowered threshold for face matching)
+                $threshold = $hasFaceMatch ? 0.75 : 0.85; // Lower threshold when faces match
+                if ($finalSimilarity >= $threshold) {
                     $results[] = [
                         'image' => $img,
-                        'similarity' => $similarity,
-                        'category' => $dbCategory['name']
+                        'similarity' => $finalSimilarity,
+                        'category' => $dbCategory['name'],
+                        'visual_similarity' => $visualSimilarity,
+                        'face_similarity' => $faceSimilarity,
+                        'has_face_match' => $hasFaceMatch
                     ];
                 }
             } catch (\Exception $e) {
@@ -249,16 +289,95 @@ class ImageController extends Controller
         usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
 
         // Log summary
-        Log::info("Search completed: " . count($allScores) . " category matches found, " . count($results) . " above 85% threshold");
+        Log::info("Search completed: " . count($allScores) . " images processed, " . count($results) . " above threshold");
         
         if (count($results) == 0) {
-            Log::info("No matches found for category: " . $searchCategory['name']);
+            Log::info("No matches found");
         }
 
         return view('images.results', [
             'results' => $results, 
             'allScores' => $allScores,
-            'searchCategory' => $searchCategory['name']
+            'searchCategory' => $searchCategory['name'],
+            'searchFaceData' => $searchFaceData
+        ]);
+    }
+
+    public function faceSearch(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|max:10240',
+        ]);
+
+        $file = $request->file('image');
+        $path = $file->store('searches', 'public');
+        $fullPath = storage_path('app/public/' . $path);
+
+        // Wait for file to be fully written
+        $waits = 0;
+        while ((!file_exists($fullPath) || filesize($fullPath) == 0) && $waits < 10) {
+            usleep(200000);
+            $waits++;
+        }
+
+        if (!@getimagesize($fullPath)) {
+            return back()->with('error', 'Uploaded file is not a valid image or could not be processed.');
+        }
+
+        // Extract face features from the uploaded image
+        $searchFaceData = $this->extractFaceFeatures($fullPath);
+
+        if (!$searchFaceData['has_faces']) {
+            return back()->with('error', 'No faces detected in the uploaded image. Please upload an image with a clear face.');
+        }
+
+        Log::info("Face search: Found " . $searchFaceData['face_count'] . " face(s) in search image");
+
+        // Get all images with faces
+        $images = Image::where('has_faces', true)
+                      ->whereNotNull('face_features')
+                      ->get();
+
+        $results = [];
+        $allScores = [];
+        
+        foreach ($images as $img) {
+            try {
+                // Calculate face similarity
+                $faceSimilarity = $this->calculateFaceSimilarity($searchFaceData, $img);
+                
+                if ($faceSimilarity > 0.5) { // Lower threshold for face-only search
+                    $results[] = [
+                        'image' => $img,
+                        'similarity' => $faceSimilarity,
+                        'face_similarity' => $faceSimilarity,
+                        'has_face_match' => true
+                    ];
+                }
+
+                $allScores[] = [
+                    'image' => $img,
+                    'similarity' => $faceSimilarity,
+                    'face_similarity' => $faceSimilarity,
+                    'has_face_match' => $faceSimilarity > 0.5
+                ];
+
+            } catch (\Exception $e) {
+                Log::error("Error processing image ID {$img->id}: " . $e->getMessage());
+                continue;
+            }
+        }
+
+        // Sort results by face similarity (highest first)
+        usort($results, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
+        usort($allScores, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
+
+        Log::info("Face search completed: " . count($allScores) . " images processed, " . count($results) . " face matches found");
+
+        return view('images.face-results', [
+            'results' => $results,
+            'allScores' => $allScores,
+            'searchFaceData' => $searchFaceData
         ]);
     }
 
@@ -410,6 +529,79 @@ class ImageController extends Controller
         return $similarity;
     }
 
+    // Calculate face similarity between two images
+    private function calculateFaceSimilarity($searchFaceData, $dbImage)
+    {
+        try {
+            if (!$searchFaceData['has_faces'] || !$dbImage->has_faces || empty($dbImage->face_features)) {
+                return 0.0;
+            }
+
+            $maxSimilarity = 0.0;
+
+            // Compare each face in search image with each face in database image
+            foreach ($searchFaceData['face_features'] as $searchFaceFeatures) {
+                foreach ($dbImage->face_features as $dbFaceFeatures) {
+                    $similarity = $this->calculateFaceFeatureSimilarity($searchFaceFeatures, $dbFaceFeatures);
+                    $maxSimilarity = max($maxSimilarity, $similarity);
+                }
+            }
+
+            return $maxSimilarity;
+
+        } catch (\Exception $e) {
+            Log::error("Error calculating face similarity: " . $e->getMessage());
+            return 0.0;
+        }
+    }
+
+    // Calculate similarity between two face feature vectors
+    private function calculateFaceFeatureSimilarity($face1Features, $face2Features)
+    {
+        try {
+            // Ensure both vectors have the same length
+            $len1 = count($face1Features);
+            $len2 = count($face2Features);
+
+            if ($len1 !== $len2) {
+                $targetLength = min($len1, $len2);
+                $face1Features = array_slice($face1Features, 0, $targetLength);
+                $face2Features = array_slice($face2Features, 0, $targetLength);
+            }
+
+            // Calculate cosine similarity
+            $dotProduct = 0.0;
+            $mag1 = 0.0;
+            $mag2 = 0.0;
+            
+            for ($i = 0; $i < count($face1Features); $i++) {
+                $dotProduct += $face1Features[$i] * $face2Features[$i];
+                $mag1 += $face1Features[$i] * $face1Features[$i];
+                $mag2 += $face2Features[$i] * $face2Features[$i];
+            }
+            
+            $mag1 = sqrt($mag1);
+            $mag2 = sqrt($mag2);
+            
+            if ($mag1 <= 0 || $mag2 <= 0) {
+                return 0.0;
+            }
+            
+            $cosineSimilarity = $dotProduct / ($mag1 * $mag2);
+            
+            // Convert from [-1, 1] range to [0, 1] range
+            $similarity = ($cosineSimilarity + 1) / 2;
+            
+            // Face similarity is more lenient than visual similarity
+            // Don't apply the cubic scaling for faces
+            return $similarity;
+
+        } catch (\Exception $e) {
+            Log::error("Error calculating face feature similarity: " . $e->getMessage());
+            return 0.0;
+        }
+    }
+
     // Helper: Call Python script
     private function extractFeatureVector($imagePath)
     {
@@ -456,6 +648,98 @@ class ImageController extends Controller
                 'error' => $e->getMessage()
             ]);
             throw $e;
+        }
+    }
+
+    // Extract face features from image
+    private function extractFaceFeatures($imagePath)
+    {
+        $pythonPath = 'python';
+        $scriptPath = base_path('face_detection.py');
+
+        $process = new Process([$pythonPath, $scriptPath, $imagePath]);
+        $process->setWorkingDirectory(base_path());
+        $process->setTimeout(60); // Longer timeout for face detection
+
+        try {
+            $process->run();
+
+            if (!$process->isSuccessful()) {
+                Log::error('Face detection Python script failed', [
+                    'command' => $process->getCommandLine(),
+                    'output' => $process->getOutput(),
+                    'error' => $process->getErrorOutput(),
+                    'exit_code' => $process->getExitCode()
+                ]);
+                // Return default values if face detection fails
+                return [
+                    'has_faces' => false,
+                    'face_count' => 0,
+                    'face_features' => [],
+                    'face_rectangles' => []
+                ];
+            }
+
+            $output = trim($process->getOutput());
+            $lines = explode("\n", $output);
+
+            $faceData = [
+                'has_faces' => false,
+                'face_count' => 0,
+                'face_features' => [],
+                'face_rectangles' => []
+            ];
+
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if (empty($line)) continue;
+
+                if (strpos($line, 'FACES_DETECTED:') === 0) {
+                    $faceData['has_faces'] = true;
+                    $faceData['face_count'] = (int) substr($line, 15);
+                } elseif (strpos($line, 'FACE_') === 0) {
+                    $parts = explode(':', $line, 2);
+                    if (count($parts) == 2) {
+                        $faceInfo = explode('|', $parts[1], 2);
+                        if (count($faceInfo) == 2) {
+                            $rectStr = $faceInfo[0];
+                            $featuresStr = $faceInfo[1];
+                            
+                            // Parse rectangle
+                            $rectParts = explode(',', $rectStr);
+                            if (count($rectParts) == 4) {
+                                $rectangle = array_map('intval', $rectParts);
+                                $faceData['face_rectangles'][] = $rectangle;
+                            }
+                            
+                            // Parse features
+                            $features = array_map('floatval', explode(',', $featuresStr));
+                            $faceData['face_features'][] = $features;
+                        }
+                    }
+                }
+            }
+
+            Log::info('Face detection completed', [
+                'has_faces' => $faceData['has_faces'],
+                'face_count' => $faceData['face_count']
+            ]);
+
+            return $faceData;
+
+        } catch (\Exception $e) {
+            Log::error('Exception in face detection', [
+                'image_path' => $imagePath,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return default values if face detection fails
+            return [
+                'has_faces' => false,
+                'face_count' => 0,
+                'face_features' => [],
+                'face_rectangles' => []
+            ];
         }
     }
 
